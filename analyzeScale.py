@@ -3,6 +3,15 @@ from imutils.perspective import four_point_transform
 from imutils import contours
 import imutils
 import cv2
+import numpy
+import urllib.request, urllib.error, urllib.parse
+
+# host to our video stream
+host = "172.16.50.74:8080"
+
+hoststream = 'http://' + host + '/shot.jpg'
+
+USE_WEBCAM = False
 
 # define the dictionary of digit segments so we can identify
 # each digit on the thermostat
@@ -19,12 +28,18 @@ DIGITS_LOOKUP = {
     (1, 1, 1, 1, 0, 1, 1): 9
 }
 
+def get_img_from_stream():
+    if USE_WEBCAM:
+        cam = cv2.VideoCapture(0)
+        _, img = cam.read()
+    else:
+        # Use urllib to get the image and convert into a cv2 usable format
+        imgResp = urllib.request.urlopen(hoststream)
+        imgNp = numpy.array(bytearray(imgResp.read()), dtype=numpy.uint8)
+        img = cv2.imdecode(imgNp, -1)
+    return img
 
-
-def main():
-    # load the example image
-    image = cv2.imread("images/01_On.PNG")
-
+def extract_digits_from_image(image):
     # pre-process the image by resizing it, converting it to
     # graycale, blurring it, and computing an edge map
     image = imutils.resize(image, height=500)
@@ -61,8 +76,8 @@ def main():
     thresh = cv2.threshold(warped, 0, 255,
                            cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)[1]
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
-    thresh=cv2.dilate(thresh, kernel)
-    #thresh = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel)
+    thresh = cv2.dilate(thresh, kernel)
+    # thresh = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel)
 
     # find contours in the thresholded image, then initialize the
     # digit contours lists
@@ -111,9 +126,9 @@ def main():
             ((0, h - dH), (w, h))  # bottom
         ]
         on = [0] * len(segments)
-        print(on)
-        cv2.imshow("Result", output)
-        cv2.waitKey(0)
+        # print(on)
+        # cv2.imshow("Result", output)
+        # cv2.waitKey(0)
 
         # loop over the segments
         for (i, ((xA, yA), (xB, yB))) in enumerate(segments):
@@ -140,11 +155,24 @@ def main():
             digit = '?'
             digits.append(digit)
 
-    # display the digits
-    print(digits)
-    cv2.imshow("Input", image)
-    cv2.imshow("Output", output)
-    cv2.waitKey(0)
+    return output, digits
+
+
+def main():
+    # load the example image
+    while True:
+        try:
+            inputImage=get_img_from_stream()
+            #inputImage = cv2.imread("images/01_On.PNG")
+            outputImage, digits =extract_digits_from_image(inputImage)
+
+            # display the digits
+            print(digits)
+            cv2.imshow("Input", inputImage)
+            cv2.imshow("Output", outputImage)
+            cv2.waitKey(1)
+        except Exception as e:
+            print(e)
 
 
 if __name__ == '__main__':
