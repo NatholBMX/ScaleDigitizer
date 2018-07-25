@@ -28,6 +28,31 @@ DIGITS_LOOKUP = {
     (1, 1, 1, 1, 0, 1, 1): 9
 }
 
+
+
+def auto_canny(image, sigma=0.33):
+    # compute the median of the single channel pixel intensities
+    v = numpy.median(image)
+
+    # apply automatic Canny edge detection using the computed median
+    lower = int(max(0, (1.0 - sigma) * v))
+    upper = int(min(255, (1.0 + sigma) * v))
+    edged = cv2.Canny(image, lower, upper)
+
+    # return the edged image
+    return edged
+
+def find_color(original_img):
+    # create lower and upper bounds for red
+    red_lower = numpy.array([0, 50, 50], dtype="uint8")
+    red_upper = numpy.array([255, 255, 255], dtype="uint8")
+
+    # perform the filtering. mask is another word for filter
+    mask = cv2.inRange(original_img, red_lower, red_upper)
+    output = cv2.bitwise_and(original_img, original_img, mask=mask)
+
+    return output
+
 def get_img_from_stream():
     if USE_WEBCAM:
         cam = cv2.VideoCapture(0)
@@ -159,20 +184,37 @@ def extract_digits_from_image(image):
 
 
 def main():
-    # load the example image
-    while True:
-        try:
-            inputImage=get_img_from_stream()
-            #inputImage = cv2.imread("images/01_On.PNG")
-            outputImage, digits =extract_digits_from_image(inputImage)
+    cap = cv2.VideoCapture('Videos/01.mp4')
 
-            # display the digits
-            print(digits)
-            cv2.imshow("Input", inputImage)
-            cv2.imshow("Output", outputImage)
-            cv2.waitKey(1)
+    FIRST_FRAME_FOUND=False
+    first_frame=None
+
+    while (cap.isOpened()):
+        ret, frame = cap.read()
+        if (frame is not None) and (not FIRST_FRAME_FOUND):
+            first_frame=frame
+            FIRST_FRAME_FOUND=True
+
+
+        try:
+            #ret, thresh = cv2.threshold(gray, 100, 255, 0)
+            diff=cv2.absdiff(first_frame, frame)
+            gray=cv2.cvtColor(diff, cv2.COLOR_BGR2GRAY)
+            ret, thresh = cv2.threshold(gray, 50, 255, 0)
+            _, contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+            cv2.drawContours(diff, contours, -1, (0, 0, 255), 3)
+
+            cv2.imshow('frame', diff)
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+
         except Exception as e:
             print(e)
+            break
+
+    cap.release()
+    cv2.destroyAllWindows()
+
 
 
 if __name__ == '__main__':
