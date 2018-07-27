@@ -36,18 +36,12 @@ def preprocess_image(image, is_first_frame=False):
     # extract the scale display ROI from the first frame
     if is_first_frame:
         _, centerX, centerY, radius = imageAnalysis.detect_largest_circle(thresh)
-        scale_roi = (centerX - radius, centerY - radius, centerX + radius, centerY + radius)
-        print(scale_roi)
+        scale_roi = (centerY - radius, centerX - radius, centerY + radius, centerX + radius)
 
-        cropped_image = rotated_image[scale_roi[0]:scale_roi[0] + scale_roi[2], scale_roi[1]:scale_roi[1] + scale_roi[3]]
-        blurred = cv2.GaussianBlur(cropped_image, (7, 7), 0)
-        edged = imageAnalysis.run_edge_detection(blurred, 0)
-        cv2.imshow("", cropped_image)
-        _, x1, x2, y1, y2=imageAnalysis.detect_horizontal_lines(edged)
-        scale_roi=(centerX - radius, y1, centerX + radius, y2)
-        print(scale_roi)
-
-    processed_image = rotated_image[scale_roi[0]:scale_roi[0] + scale_roi[2], scale_roi[1]:scale_roi[1] + scale_roi[3]]
+    cropped_image = rotated_image[scale_roi[0]:scale_roi[0] + scale_roi[2], scale_roi[1]:scale_roi[1] + scale_roi[3]]
+    blurred = cv2.GaussianBlur(cropped_image, (7, 7), 0)
+    kernel = numpy.ones((7, 7), numpy.uint8)
+    processed_image = cv2.erode(blurred, kernel, iterations=1)
 
     return processed_image
 
@@ -64,10 +58,10 @@ def main():
 
         try:
             preprocessed_image = preprocess_image(frame)
-            #blurred = cv2.GaussianBlur(preprocessed_image, (7, 7), 0)
-            #edged=imageAnalysis.run_edge_detection(blurred, 0)
+            # blurred = cv2.GaussianBlur(preprocessed_image, (7, 7), 0)
+            edged = imageAnalysis.run_edge_detection(preprocessed_image, 0)
 
-            cv2.imshow('frame', preprocessed_image)
+            cv2.imshow('frame', edged)
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
 
