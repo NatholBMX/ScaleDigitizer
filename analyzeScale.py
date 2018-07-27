@@ -3,6 +3,7 @@ import cv2
 import numpy
 import urllib.request, urllib.error, urllib.parse
 from utils import imageAnalysis
+import imutils
 
 USE_WEBCAM = False
 
@@ -45,6 +46,30 @@ def preprocess_image(image, is_first_frame=False):
 
     return processed_image
 
+def find_digits(image):
+    cnts = cv2.findContours(image, cv2.RETR_EXTERNAL,
+                            cv2.CHAIN_APPROX_SIMPLE)
+    cnts = cnts[0] if imutils.is_cv2() else cnts[1]
+    cnts = sorted(cnts, key=cv2.contourArea, reverse=True)
+    displayCnt = None
+
+    # loop over the contours
+    for c in cnts:
+        # approximate the contour
+        peri = cv2.arcLength(c, True)
+        approx = cv2.approxPolyDP(c, 0.02 * peri, True)
+
+        # if the contour has four vertices, then we have found
+        # the thermostat display
+        if len(approx) == 4:
+            displayCnt = approx
+            break
+        x, y, w, h = cv2.boundingRect(c)
+        if h<image.shape[0]/5:
+            continue
+        cv2.rectangle(image, (x, y), (x + w, y + h), (255, 255, 0), 2)
+    return image
+
 
 def main():
     cap = cv2.VideoCapture('Videos/02.mp4')
@@ -60,6 +85,7 @@ def main():
             preprocessed_image = preprocess_image(frame)
             # blurred = cv2.GaussianBlur(preprocessed_image, (7, 7), 0)
             edged = imageAnalysis.run_edge_detection(preprocessed_image, 0)
+            find_digits(edged)
 
             cv2.imshow('frame', edged)
             if cv2.waitKey(1) & 0xFF == ord('q'):
