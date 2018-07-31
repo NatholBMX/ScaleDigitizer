@@ -33,7 +33,7 @@ def crop_scale_display(image, is_first_frame=False):
 
     rotated_image = imageAnalysis.rotate_image(image, -90)
     gray = cv2.cvtColor(rotated_image, cv2.COLOR_BGR2GRAY)
-    thresh = imageAnalysis.run_threshold(gray, 110, 200, 1)
+    thresh = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 27, 40)
 
     # extract the scale display ROI from the first frame
     if is_first_frame:
@@ -41,6 +41,9 @@ def crop_scale_display(image, is_first_frame=False):
         scale_roi = (centerY - radius, centerX - radius, centerY + radius, centerX + radius)
 
     cropped_image = rotated_image[scale_roi[0]:scale_roi[0] + scale_roi[2], scale_roi[1]:scale_roi[1] + scale_roi[3]]
+    cv2.imshow("", cropped_image)
+    cv2.imshow("orig", rotated_image)
+    cv2.waitKey(1)
     cropped_gray = gray[scale_roi[0]:scale_roi[0] + scale_roi[2], scale_roi[1]:scale_roi[1] + scale_roi[3]]
     cropped_thresh = thresh[scale_roi[0]:scale_roi[0] + scale_roi[2], scale_roi[1]:scale_roi[1] + scale_roi[3]]
     blurred = cv2.GaussianBlur(cropped_image, (7, 7), 0)
@@ -251,7 +254,7 @@ def recognize_digits_area_method(digits_positions, output_img, input_img):
 
 
 def main():
-    cap = cv2.VideoCapture('Videos/06.mp4')
+    cap = cv2.VideoCapture('Videos/07.mp4')
 
     _, firstFrame = cap.read()
 
