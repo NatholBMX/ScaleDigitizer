@@ -41,12 +41,13 @@ def crop_scale_display(image, is_first_frame=False):
         scale_roi = (centerY - radius, centerX - radius, centerY + radius, centerX + radius)
 
     cropped_image = rotated_image[scale_roi[0]:scale_roi[0] + scale_roi[2], scale_roi[1]:scale_roi[1] + scale_roi[3]]
-    cv2.imshow("", cropped_image)
-    cv2.imshow("orig", rotated_image)
-    cv2.waitKey(1)
+    #cv2.imshow("", cropped_image)
+    #cv2.imshow("orig", rotated_image)
+    #cv2.waitKey(1)
     cropped_gray = gray[scale_roi[0]:scale_roi[0] + scale_roi[2], scale_roi[1]:scale_roi[1] + scale_roi[3]]
     cropped_thresh = thresh[scale_roi[0]:scale_roi[0] + scale_roi[2], scale_roi[1]:scale_roi[1] + scale_roi[3]]
     blurred = cv2.GaussianBlur(cropped_image, (7, 7), 0)
+    cropped_gray=cv2.GaussianBlur(cropped_gray, (5, 5), 0)
     #blurred = cv2.medianBlur(cropped_image, 5)
     kernel = numpy.ones((7, 7), numpy.uint8)
     #processed_image = cv2.erode(blurred, kernel, iterations=1)
@@ -74,7 +75,7 @@ def find_digits(image):
     img_array = numpy.sum(image, axis=0)
     horizon_position = helper_extract(img_array, threshold=20)
     img_array = numpy.sum(image, axis=1)
-    vertical_position = helper_extract(img_array, threshold=20*2)
+    vertical_position = helper_extract(img_array, threshold=20*3)
     # make vertical_position has only one element
     if len(vertical_position) > 1:
         vertical_position = [(vertical_position[0][0], vertical_position[len(vertical_position) - 1][1])]
@@ -264,14 +265,14 @@ def main():
         ret, frame = cap.read()
 
         preprocessed_image, pre_gray, pre_thresh=crop_scale_display(frame)
-        # pre_gray = cv2.resize(pre_gray, (0, 0), fx=2, fy=2)
-        # dst = preprocess_image(pre_gray)
-        # digits_positions = find_digits(dst)
-        # digits = recognize_digits_line_method(digits_positions, pre_gray, dst)
-        #
-        # print(digits)
-        # cv2.imshow("Frame", pre_gray)
-        # cv2.waitKey(0)
+        pre_gray = cv2.resize(pre_gray, (0, 0), fx=2, fy=2)
+        dst = preprocess_image(pre_gray)
+        digits_positions = find_digits(dst)
+        digits = recognize_digits_line_method(digits_positions, pre_gray, dst)
+
+        print(digits)
+        cv2.imshow("Frame", pre_gray)
+        cv2.waitKey(0)
 
     cap.release()
     cv2.destroyAllWindows()
