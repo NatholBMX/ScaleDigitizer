@@ -2,7 +2,7 @@ import cv2
 import numpy
 import urllib.request, urllib.error, urllib.parse
 from utils import imageAnalysis
-import imutils
+import imutils.perspective
 
 from utils.imageAnalysis import DIGITS_LOOKUP
 
@@ -41,9 +41,7 @@ def crop_scale_display(image, is_first_frame=False):
         scale_roi = (centerY - radius, centerX - radius, centerY + radius, centerX + radius)
 
     cropped_image = rotated_image[scale_roi[0]:scale_roi[0] + scale_roi[2], scale_roi[1]:scale_roi[1] + scale_roi[3]]
-    #cv2.imshow("", cropped_image)
-    #cv2.imshow("orig", rotated_image)
-    #cv2.waitKey(1)
+
     cropped_gray = gray[scale_roi[0]:scale_roi[0] + scale_roi[2], scale_roi[1]:scale_roi[1] + scale_roi[3]]
     cropped_thresh = thresh[scale_roi[0]:scale_roi[0] + scale_roi[2], scale_roi[1]:scale_roi[1] + scale_roi[3]]
     blurred = cv2.GaussianBlur(cropped_image, (7, 7), 0)
@@ -52,6 +50,10 @@ def crop_scale_display(image, is_first_frame=False):
     kernel = numpy.ones((7, 7), numpy.uint8)
     #processed_image = cv2.erode(blurred, kernel, iterations=1)
     processed_image=blurred
+
+    #cv2.imshow("crop", cropped_thresh)
+    #cv2.imshow("orig", rotated_image)
+    #cv2.waitKey(1)
 
     return processed_image, cropped_gray, cropped_thresh
 
@@ -63,8 +65,8 @@ def preprocess_image(image):
     dst = cv2.adaptiveThreshold(img, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 127, 60)
     # 闭运算开运算
     kernel = cv2.getStructuringElement(cv2.MORPH_CROSS, (5, 5))
-    dst = cv2.morphologyEx(dst, cv2.MORPH_CLOSE, kernel)
-    dst = cv2.morphologyEx(dst, cv2.MORPH_OPEN, kernel)
+    dst = cv2.morphologyEx(dst, cv2.MORPH_CLOSE, kernel, iterations=1)
+    dst = cv2.morphologyEx(dst, cv2.MORPH_OPEN, kernel, iterations=2)
     cv2.imshow("", dst)
 
     return dst
@@ -75,7 +77,7 @@ def find_digits(image):
     img_array = numpy.sum(image, axis=0)
     horizon_position = helper_extract(img_array, threshold=20)
     img_array = numpy.sum(image, axis=1)
-    vertical_position = helper_extract(img_array, threshold=20*3)
+    vertical_position = helper_extract(img_array, threshold=20*4)
     # make vertical_position has only one element
     if len(vertical_position) > 1:
         vertical_position = [(vertical_position[0][0], vertical_position[len(vertical_position) - 1][1])]
@@ -83,7 +85,6 @@ def find_digits(image):
         for v in vertical_position:
             digits_positions.append(list(zip(h, v)))
     assert len(digits_positions) > 0, "Failed to find digits's positions"
-
     return digits_positions
 
 
@@ -255,7 +256,7 @@ def recognize_digits_area_method(digits_positions, output_img, input_img):
 
 
 def main():
-    cap = cv2.VideoCapture('Videos/07.mp4')
+    cap = cv2.VideoCapture('Videos/05.mp4')
 
     _, firstFrame = cap.read()
 
