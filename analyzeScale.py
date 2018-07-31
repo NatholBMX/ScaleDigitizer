@@ -1,10 +1,10 @@
-# import the necessary packages
 import cv2
 import numpy
 import urllib.request, urllib.error, urllib.parse
 from utils import imageAnalysis
 import imutils
-from keras.models import load_model
+
+from utils.imageAnalysis import DIGITS_LOOKUP
 
 USE_WEBCAM = False
 
@@ -14,9 +14,6 @@ if not USE_WEBCAM:
 
 # Region of interest for scale display
 scale_roi = None
-
-
-# model = load_model("./weights/model.h5")
 
 
 def get_img_from_stream():
@@ -31,12 +28,12 @@ def get_img_from_stream():
     return img
 
 
-def preprocess_image(image, is_first_frame=False):
+def crop_scale_display(image, is_first_frame=False):
     global scale_roi
 
     rotated_image = imageAnalysis.rotate_image(image, -90)
     gray = cv2.cvtColor(rotated_image, cv2.COLOR_BGR2GRAY)
-    thresh = imageAnalysis.run_threshold(gray, 50, 120, 1)
+    thresh = imageAnalysis.run_threshold(gray, 110, 200, 1)
 
     # extract the scale display ROI from the first frame
     if is_first_frame:
@@ -46,135 +43,232 @@ def preprocess_image(image, is_first_frame=False):
     cropped_image = rotated_image[scale_roi[0]:scale_roi[0] + scale_roi[2], scale_roi[1]:scale_roi[1] + scale_roi[3]]
     cropped_gray = gray[scale_roi[0]:scale_roi[0] + scale_roi[2], scale_roi[1]:scale_roi[1] + scale_roi[3]]
     cropped_thresh = thresh[scale_roi[0]:scale_roi[0] + scale_roi[2], scale_roi[1]:scale_roi[1] + scale_roi[3]]
-    # blurred = cv2.GaussianBlur(cropped_image, (7, 7), 0)
-    blurred = cv2.medianBlur(cropped_image, 5)
+    blurred = cv2.GaussianBlur(cropped_image, (7, 7), 0)
+    #blurred = cv2.medianBlur(cropped_image, 5)
     kernel = numpy.ones((7, 7), numpy.uint8)
-    processed_image = cv2.erode(blurred, kernel, iterations=1)
+    #processed_image = cv2.erode(blurred, kernel, iterations=1)
+    processed_image=blurred
 
     return processed_image, cropped_gray, cropped_thresh
 
 
+def preprocess_image(image):
+    clahe = cv2.createCLAHE(clipLimit=2, tileGridSize=(6, 6))
+    img = clahe.apply(image)
+    # 自适应阈值二值化
+    dst = cv2.adaptiveThreshold(img, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 127, 60)
+    # 闭运算开运算
+    kernel = cv2.getStructuringElement(cv2.MORPH_CROSS, (5, 5))
+    dst = cv2.morphologyEx(dst, cv2.MORPH_CLOSE, kernel)
+    dst = cv2.morphologyEx(dst, cv2.MORPH_OPEN, kernel)
+    cv2.imshow("", dst)
+
+    return dst
+
+
 def find_digits(image):
-    contours = cv2.findContours(image, cv2.RETR_EXTERNAL,
-                                cv2.CHAIN_APPROX_SIMPLE)
-    contours = contours[0] if imutils.is_cv2() else contours[1]
-    # contours = sorted(contours, key=cv2.contourArea, reverse=True)
-    digit_contours = []
+    digits_positions = []
+    img_array = numpy.sum(image, axis=0)
+    horizon_position = helper_extract(img_array, threshold=20)
+    img_array = numpy.sum(image, axis=1)
+    vertical_position = helper_extract(img_array, threshold=20*2)
+    # make vertical_position has only one element
+    if len(vertical_position) > 1:
+        vertical_position = [(vertical_position[0][0], vertical_position[len(vertical_position) - 1][1])]
+    for h in horizon_position:
+        for v in vertical_position:
+            digits_positions.append(list(zip(h, v)))
+    assert len(digits_positions) > 0, "Failed to find digits's positions"
 
-    # loop over the contours
-    for c in contours:
-        # approximate the contour
-        peri = cv2.arcLength(c, True)
-        approx = cv2.approxPolyDP(c, 0.02 * peri, True)
-
-        # if the contour has four vertices, then we have found a possible candidate
-        x, y, w, h = cv2.boundingRect(c)
-        # first check if the size of the contours fits
-        if h >= image.shape[0] / 5 and h < image.shape[0] / 3 and w < image.shape[1] / 6:
-            digit_contours.append(c)
-            cv2.rectangle(image, (x, y), (x + w, y + h), (255, 255, 0), 2)
-
-    return image, digit_contours
+    return digits_positions
 
 
-def recognize_digit(image, contour):
+def helper_extract(one_d_array, threshold=20):
+    res = []
+    flag = 0
+    temp = 0
+    for i in range(len(one_d_array)):
+        if one_d_array[i] < 8 * 255:
+            if flag > threshold:
+                start = i - flag
+                end = i
+                temp = end
+                if end - start > 20:
+                    res.append((start, end))
+            flag = 0
+        else:
+            flag += 1
+
+    else:
+        if flag > threshold:
+            start = temp
+            end = len(one_d_array)
+            if end - start > 50:
+                res.append((start, end))
+    return res
+
+def recognize_digits_line_method(digits_positions, output_img, input_img):
     digits = []
-    (x, y, w, h) = cv2.boundingRect(contour)
-    roi = image[y:y + h, x:x + w]
+    for c in digits_positions:
+        x0, y0 = c[0]
+        x1, y1 = c[1]
+        roi = input_img[y0:y1, x0:x1]
+        h, w = roi.shape
+        suppose_W = max(1, int(h / 1.9))
 
-    (roiH, roiW) = roi.shape
-    (dW, dH) = (int(roiW * 0.25), int(roiH * 0.15))
-    dHC = int(roiH * 0.05)
+        # 消除无关符号干扰
+        if x1 - x0 < 50 and cv2.countNonZero(roi) / ((y1 - y0) * (x1 - x0)) < 0.2:
+            continue
 
-    # define the set of 7 segments
-    segments = [
-        ((0, 0), (w, dH)),  # top
-        ((0, 0), (dW, h // 2)),  # top-left
-        ((w - dW, 0), (w, h // 2)),  # top-right
-        ((0, (h // 2) - dHC), (w, (h // 8) + dHC)),  # center
-        ((0, h // 2), (dW, h)),  # bottom-left
-        ((w - dW, h // 2), (w, h)),  # bottom-right
-        ((0, h - dH), (w, h))  # bottom
-    ]
+        # 对1的情况单独识别
+        if w < suppose_W / 2:
+            x0 = max(x0 + w - suppose_W, 0)
+            roi = input_img[y0:y1, x0:x1]
+            w = roi.shape[1]
 
-    on = [0] * len(segments)
-    # loop over the segments
-    for (i, ((xA, yA), (xB, yB))) in enumerate(segments):
-        # extract the segment ROI, count the total number of
-        # thresholded pixels in the segment, and then compute
-        # the area of the segment
-        segROI = roi[yA:yB, xA:xB]
+        center_y = h // 2
+        quater_y_1 = h // 4
+        quater_y_3 = quater_y_1 * 3
+        center_x = w // 2
+        line_width = 5  # line's width
+        width = (max(int(w * 0.15), 1) + max(int(h * 0.15), 1)) // 2
+        small_delta = int(h / 6.0) // 4
+        segments = [
+            ((w - 2 * width, quater_y_1 - line_width), (w, quater_y_1 + line_width)),
+            ((w - 2 * width, quater_y_3 - line_width), (w, quater_y_3 + line_width)),
+            ((center_x - line_width - small_delta, h - 2 * width), (center_x - small_delta + line_width, h)),
+            ((0, quater_y_3 - line_width), (2 * width, quater_y_3 + line_width)),
+            ((0, quater_y_1 - line_width), (2 * width, quater_y_1 + line_width)),
+            ((center_x - line_width, 0), (center_x + line_width, 2 * width)),
+            ((center_x - line_width, center_y - line_width), (center_x + line_width, center_y + line_width)),
+        ]
+        on = [0] * len(segments)
 
-        # Debugging visualization
-        cv2.rectangle(roi, (xA, yA), (xA + xB, yA + yB), (255, 255, 255), 5)
-        cv2.imshow("", roi)
-        cv2.waitKey(0)
+        for (i, ((xa, ya), (xb, yb))) in enumerate(segments):
+            seg_roi = roi[ya:yb, xa:xb]
+            # plt.imshow(seg_roi, 'gray')
+            # plt.show()
+            total = cv2.countNonZero(seg_roi)
+            area = (xb - xa) * (yb - ya) * 0.9
+            # print('prob: ', total / float(area))
+            if total / float(area) > 0.25:
+                on[i] = 1
+        # print('encode: ', on)
+        if tuple(on) in DIGITS_LOOKUP.keys():
+            digit = DIGITS_LOOKUP[tuple(on)]
+        else:
+            digit = '*'
 
-        total = cv2.countNonZero(segROI)
-        area = (xB - xA) * (yB - yA)
-        print((total, float(area)))
-        # if the total number of non-zero pixels is greater than
-        # 50% of the area, mark the segment as "on"
-        if abs(total / float(area)) > 0.2:
-            on[i] = 1
+        digits.append(digit)
+
+        # 小数点的识别
+        # print('dot signal: ',cv2.countNonZero(roi[h - int(3 * width / 4):h, w - int(3 * width / 4):w]) / (9 / 16 * width * width))
+        if cv2.countNonZero(roi[h - int(3 * width / 4):h, w - int(3 * width / 4):w]) / (9 / 16 * width * width) > 0.65:
+            digits.append('.')
+            cv2.rectangle(output_img,
+                          (x0 + w - int(3 * width / 4), y0 + h - int(3 * width / 4)),
+                          (x1, y1), (0, 128, 0), 2)
+            cv2.putText(output_img, 'dot',
+                        (x0 + w - int(3 * width / 4), y0 + h - int(3 * width / 4) - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 128, 0), 2)
+
+        cv2.rectangle(output_img, (x0, y0), (x1, y1), (0, 128, 0), 2)
+        cv2.putText(output_img, str(digit), (x0 + 3, y0 + 10), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 128, 0), 2)
+    return digits
+
+def recognize_digits_area_method(digits_positions, output_img, input_img):
+    digits = []
+    for c in digits_positions:
+        x0, y0 = c[0]
+        x1, y1 = c[1]
+        roi = input_img[y0:y1, x0:x1]
+        h, w = roi.shape
+        suppose_W = max(1, int(h / 1.9))
+        # 对1的情况单独识别
+        if w < suppose_W / 2:
+            x0 = x0 + w - suppose_W
+            w = suppose_W
+            roi = input_img[y0:y1, x0:x1]
+        width = (max(int(w * 0.15), 1) + max(int(h * 0.15), 1)) // 2
+        dhc = int(width * 0.8)
+        # print('width :', width)
+        # print('dhc :', dhc)
+
+        small_delta = int(h / 6.0) // 4
+        # print('small_delta : ', small_delta)
+        segments = [
+            # # version 1
+            # ((w - width, width // 2), (w, (h - dhc) // 2)),
+            # ((w - width - small_delta, (h + dhc) // 2), (w - small_delta, h - width // 2)),
+            # ((width // 2, h - width), (w - width // 2, h)),
+            # ((0, (h + dhc) // 2), (width, h - width // 2)),
+            # ((small_delta, width // 2), (small_delta + width, (h - dhc) // 2)),
+            # ((small_delta, 0), (w, width)),
+            # ((width, (h - dhc) // 2), (w - width, (h + dhc) // 2))
+
+            # # version 2
+            ((w - width - small_delta, width // 2), (w, (h - dhc) // 2)),
+            ((w - width - 2 * small_delta, (h + dhc) // 2), (w - small_delta, h - width // 2)),
+            ((width - small_delta, h - width), (w - width - small_delta, h)),
+            ((0, (h + dhc) // 2), (width, h - width // 2)),
+            ((small_delta, width // 2), (small_delta + width, (h - dhc) // 2)),
+            ((small_delta, 0), (w + small_delta, width)),
+            ((width - small_delta, (h - dhc) // 2), (w - width - small_delta, (h + dhc) // 2))
+        ]
+        # cv2.rectangle(roi, segments[0][0], segments[0][1], (128, 0, 0), 2)
+        # cv2.rectangle(roi, segments[1][0], segments[1][1], (128, 0, 0), 2)
+        # cv2.rectangle(roi, segments[2][0], segments[2][1], (128, 0, 0), 2)
+        # cv2.rectangle(roi, segments[3][0], segments[3][1], (128, 0, 0), 2)
+        # cv2.rectangle(roi, segments[4][0], segments[4][1], (128, 0, 0), 2)
+        # cv2.rectangle(roi, segments[5][0], segments[5][1], (128, 0, 0), 2)
+        # cv2.rectangle(roi, segments[6][0], segments[6][1], (128, 0, 0), 2)
+        # cv2.imshow('i', roi)
+        # cv2.waitKey()
+        # cv2.destroyWindow('i')
+        on = [0] * len(segments)
+
+        for (i, ((xa, ya), (xb, yb))) in enumerate(segments):
+            seg_roi = roi[ya:yb, xa:xb]
+            # plt.imshow(seg_roi)
+            # plt.show()
+            total = cv2.countNonZero(seg_roi)
+            area = (xb - xa) * (yb - ya) * 0.9
+            print(total / float(area))
+            if total / float(area) > 0.45:
+                on[i] = 1
+
         # print(on)
-    # lookup the digit and draw it on the image
-    try:
-        digit = imageAnalysis.DIGITS_LOOKUP[tuple(on)]
-    except Exception as e:
-        # print(e)
-        digit = "?"
-    print((on, digit))
-    # cv2.imshow("", image)
-    # cv2.waitKey(0)
-    digits.append(digit)
-    cv2.rectangle(image, (x, y), (x + w, y + h), (0, 255, 0), 1)
-    cv2.putText(image, str(digit), (x - 10, y - 10),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 255, 0), 2)
+
+        if tuple(on) in DIGITS_LOOKUP.keys():
+            digit = DIGITS_LOOKUP[tuple(on)]
+        else:
+            digit = '*'
+        digits.append(digit)
+        cv2.rectangle(output_img, (x0, y0), (x1, y1), (0, 128, 0), 2)
+        cv2.putText(output_img, str(digit), (x0 - 10, y0 + 10), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 128, 0), 2)
+
     return digits
 
 
-def recognize_digit2(image, digit_contour):
-    (x, y, w, h) = cv2.boundingRect(digit_contour)
-    roi = image[y:y + h, x:x + w]
-    resized_roi = cv2.resize(roi, (28, 28))
-    resized_roi = resized_roi.reshape(1, 28 * 28)
-    digit = model.predict(resized_roi)
-    print(numpy.argmax(digit))
-    cv2.imshow("test", roi)
-    cv2.waitKey(0)
-    return digit
-
-
 def main():
-    cap = cv2.VideoCapture('Videos/01.mp4')
+    cap = cv2.VideoCapture('Videos/06.mp4')
 
     _, firstFrame = cap.read()
 
-    frame, _, _ = preprocess_image(firstFrame, is_first_frame=True)
+    frame, _, _ = crop_scale_display(firstFrame, is_first_frame=True)
 
     while (cap.isOpened()):
         ret, frame = cap.read()
 
-        try:
-            preprocessed_image, pre_gray, pre_thresh = preprocess_image(frame)
-            # blurred = cv2.GaussianBlur(preprocessed_image, (7, 7), 0)
-            edged = imageAnalysis.run_edge_detection(preprocessed_image, 0)
-            _, digit_contours = find_digits(edged)
-
-            # gray = cv2.cvtColor(preprocessed_image, cv2.COLOR_BGR2GRAY)
-
-            for cont in digit_contours:
-                digit = recognize_digit(pre_gray, cont)
-                # print(digit)
-
-            cv2.imshow('frame', preprocessed_image)
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                break
-
-        except Exception as e:
-            print(e)
-            break
+        preprocessed_image, pre_gray, pre_thresh=crop_scale_display(frame)
+        # pre_gray = cv2.resize(pre_gray, (0, 0), fx=2, fy=2)
+        # dst = preprocess_image(pre_gray)
+        # digits_positions = find_digits(dst)
+        # digits = recognize_digits_line_method(digits_positions, pre_gray, dst)
+        #
+        # print(digits)
+        # cv2.imshow("Frame", pre_gray)
+        # cv2.waitKey(0)
 
     cap.release()
     cv2.destroyAllWindows()
@@ -182,5 +276,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
-# thresh=imageAnalysis.run_threshold(pre_gray, 40, 240, 1)
