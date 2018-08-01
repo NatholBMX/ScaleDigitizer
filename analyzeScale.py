@@ -37,6 +37,7 @@ def crop_scale_display(image, is_first_frame=False):
 
     # extract the scale display ROI from the first frame
     if is_first_frame:
+        imageAnalysis.detect_largest_rectangle(thresh)
         _, centerX, centerY, radius = imageAnalysis.detect_largest_circle(thresh)
         scale_roi = (centerY - radius, centerX - radius, centerY + radius, centerX + radius)
 
@@ -266,12 +267,12 @@ def main():
         ret, frame = cap.read()
 
         preprocessed_image, pre_gray, pre_thresh=crop_scale_display(frame)
-        pre_gray = cv2.resize(pre_gray, (0, 0), fx=2, fy=2)
-        dst = preprocess_image(pre_gray)
-        digits_positions = find_digits(dst)
-        digits = recognize_digits_line_method(digits_positions, pre_gray, dst)
+        #pre_gray = cv2.resize(pre_gray, (0, 0), fx=2, fy=2)
+        #dst = preprocess_image(pre_gray)
+        #digits_positions = find_digits(dst)
+        #digits = recognize_digits_line_method(digits_positions, pre_gray, dst)
 
-        print(digits)
+        #print(digits)
         cv2.imshow("Frame", pre_gray)
         cv2.waitKey(0)
 
