@@ -224,11 +224,12 @@ def extract_digits_from_image(image):
 
 def detect_largest_rectangle(image):
     _, contours, hierarchy = cv2.findContours(image, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-    #epsilon = 0.1 * cv2.arcLength(contours, True)
-    #approx = cv2.approxPolyDP(contours, epsilon, True)
+
     i=10
     for cnt in contours:
-        if len(cnt)==4:
+        epsilon = 0.1 * cv2.arcLength(cnt, True)
+        approx = cv2.approxPolyDP(cnt, epsilon, True)
+        if len(approx)==4:
             cv2.drawContours(image, [cnt], 0, (120, i, 0), 3)
             i+=10
             cv2.imshow("cont", image)
