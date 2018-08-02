@@ -3,6 +3,9 @@ import imutils
 import numpy
 from imutils import contours
 from imutils.perspective import four_point_transform
+import math
+
+VISUALIZE = True
 
 
 def rotate_image(image, angle):
@@ -12,9 +15,11 @@ def rotate_image(image, angle):
     rotated_image = cv2.warpAffine(image, M, (w, h))
     return rotated_image
 
+
 def detect_largest_circle(image):
-    circles = cv2.HoughCircles(image, cv2.HOUGH_GRADIENT, 1, int(image.shape[1]/2),
-                               param1=50, param2=30, minRadius=int(image.shape[0]/8), maxRadius=int(image.shape[0]/2))
+    circles = cv2.HoughCircles(image, cv2.HOUGH_GRADIENT, 1, int(image.shape[1] / 2),
+                               param1=50, param2=30, minRadius=int(image.shape[0] / 8),
+                               maxRadius=int(image.shape[0] / 2))
     circles = numpy.uint16(numpy.around(circles))
 
     for i in circles[0, :]:
@@ -23,30 +28,38 @@ def detect_largest_circle(image):
         # draw the center of the circle
         cv2.circle(image, (i[0], i[1]), 2, (0, 0, 255), 3)
 
-        cv2.rectangle(image, (i[0]-i[2], i[1]-i[2]), (i[0]+i[2], i[1]+i[2]), (0, 255, 0), 2)
+        cv2.rectangle(image, (i[0] - i[2], i[1] - i[2]), (i[0] + i[2], i[1] + i[2]), (0, 255, 0), 2)
 
         return image, i[0], i[1], i[2]
         break
 
     return image, None, None, None
 
-def detect_horizontal_lines(image):
 
-    lines = cv2.HoughLines(image, 1, numpy.pi / 180, 200)
-    for rho, theta in lines[0]:
-        a = numpy.cos(theta)
-        b = numpy.sin(theta)
-        x0 = a * rho
-        y0 = b * rho
-        x1 = int(x0 + 1000 * (-b))
-        y1 = int(y0 + 1000 * (a))
-        x2 = int(x0 - 1000 * (-b))
-        y2 = int(y0 - 1000 * (a))
+def detect_horizontal_lines(thresh_image, orig_image):
+    lines = cv2.HoughLinesP(thresh_image, 1, math.pi / 2, 2, None, 30, 1)
+    for line in lines:
+        x1 = line[0][0]
+        x2 = line[0][2]
+        y1 = line[0][1]
+        y2 = line[0][3]
 
-        cv2.line(image, (x1, y1), (x2, y2), (0, 0, 255), 2)
+        # only consider horizontal lines
+        if abs(y1 - y2) <= 5:
+            # only consider border lines
+            lower_boundary = thresh_image.shape[0]
+            print((y1, lower_boundary))
+            if (y1 < lower_boundary*0.2 and y1>lower_boundary*0.05) or (y1 > lower_boundary * 0.8 and y1<lower_boundary*0.95):
+                pt1 = (x1, y1)
+                pt2 = (x2, y2)
 
-        return image, x1, x2, y1, y2
-    return image, None, None, None, None
+                if VISUALIZE:
+                    cv2.line(orig_image, pt1, pt2, (0, 0, 255), 3)
+                    cv2.imshow("line", orig_image)
+                    cv2.waitKey(0)
+
+                return y1
+
 
 def run_threshold(image, lower_boundary, upper_boundary, threshold_index=0):
     threshold_list = [cv2.THRESH_BINARY, cv2.THRESH_BINARY_INV, cv2.THRESH_TRUNC, cv2.THRESH_TOZERO,
@@ -222,19 +235,21 @@ def extract_digits_from_image(image):
 
     return output, digits
 
-def detect_largest_rectangle(image):
-    _, contours, hierarchy = cv2.findContours(image, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
-    i=10
+def detect_largest_rectangle(thresh_image, orig_image):
+    _, contours, hierarchy = cv2.findContours(thresh_image, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
+    i = 10
     for cnt in contours:
-        epsilon = 0.1 * cv2.arcLength(cnt, True)
+        epsilon = 0.01 * cv2.arcLength(cnt, True)
         approx = cv2.approxPolyDP(cnt, epsilon, True)
-        if len(approx)==4:
-            cv2.drawContours(image, [cnt], 0, (120, i, 0), 3)
-            i+=10
-            cv2.imshow("cont", image)
-            cv2.waitKey(0)
-    return image
+        if len(approx) == 4:
+            cv2.drawContours(orig_image, [cnt], 0, (120, i, 0), 3)
+            i += 10
+    cv2.imshow("cont", orig_image)
+    cv2.imshow("thresh", thresh_image)
+    cv2.waitKey(0)
+    return thresh_image
 
 
 DIGITS_LOOKUP = {
