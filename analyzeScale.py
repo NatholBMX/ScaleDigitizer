@@ -2,12 +2,11 @@ import cv2
 import numpy
 import urllib.request, urllib.error, urllib.parse
 from utils import imageAnalysis
-import imutils.perspective
-import math
 
 from utils.imageAnalysis import DIGITS_LOOKUP
 
 USE_WEBCAM = False
+CUTOFF_AT_HORIZONTAL_LINE = False
 
 if not USE_WEBCAM:
     host = "172.16.50.74:8080"
@@ -33,24 +32,30 @@ def crop_scale_display(image, is_first_frame=False):
     global scale_roi
 
     rotated_image = imageAnalysis.rotate_image(image, -90)
+    rotated_image2 = cv2.fastNlMeansDenoisingColored(rotated_image, None, 10, 10, 7, 21)
     gray = cv2.cvtColor(rotated_image, cv2.COLOR_BGR2GRAY)
     thresh = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 27, -40)
+
+    gray2 = cv2.cvtColor(rotated_image2, cv2.COLOR_BGR2GRAY)
+    thresh2 = cv2.adaptiveThreshold(gray2, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 27, -40)
 
     # extract the scale display ROI from the first frame by finding the largest center circle
     if is_first_frame:
         _, centerX, centerY, radius = imageAnalysis.detect_largest_circle(thresh)
         scale_roi = (centerY - radius, centerX - radius, centerY + radius, centerX + radius)
 
-        # crop image and detect borders to further modify ROI
-        cropped_image = rotated_image[scale_roi[0]:scale_roi[0] + scale_roi[2], scale_roi[1]:scale_roi[1] + scale_roi[3]]
-        cropped_gray = gray[scale_roi[0]:scale_roi[0] + scale_roi[2], scale_roi[1]:scale_roi[1] + scale_roi[3]]
-        cropped_thresh = thresh[scale_roi[0]:scale_roi[0] + scale_roi[2], scale_roi[1]:scale_roi[1] + scale_roi[3]]
-        borderY=imageAnalysis.detect_horizontal_lines(cropped_thresh, cropped_image)
-        print((scale_roi, cropped_thresh.shape, borderY))
-        if borderY<=cropped_thresh.shape[0]/2:
-            scale_roi = (centerY - radius+borderY, centerX - radius, centerY + radius+borderY, centerX + radius)
-        else:
-            scale_roi = (centerY - radius, centerX - radius, borderY, centerX + radius)
+        if CUTOFF_AT_HORIZONTAL_LINE:
+            # crop image and detect borders to further modify ROI
+            cropped_image = rotated_image[scale_roi[0]:scale_roi[0] + scale_roi[2], scale_roi[1]:scale_roi[1] + scale_roi[3]]
+            cropped_gray = gray[scale_roi[0]:scale_roi[0] + scale_roi[2], scale_roi[1]:scale_roi[1] + scale_roi[3]]
+            cropped_thresh = thresh[scale_roi[0]:scale_roi[0] + scale_roi[2], scale_roi[1]:scale_roi[1] + scale_roi[3]]
+            borderY=imageAnalysis.detect_horizontal_lines(cropped_thresh, cropped_image)
+            print((scale_roi, cropped_thresh.shape, borderY))
+            if borderY<=cropped_thresh.shape[0]/2:
+                scale_roi = (centerY - radius+borderY, centerX - radius, centerY + radius+borderY, centerX + radius)
+            else:
+                scale_roi = (centerY - radius, centerX - radius, borderY, centerX + radius)
+
     cropped_image = rotated_image[scale_roi[0]:scale_roi[0] + scale_roi[2], scale_roi[1]:scale_roi[1] + scale_roi[3]]
     cropped_gray = gray[scale_roi[0]:scale_roi[0] + scale_roi[2], scale_roi[1]:scale_roi[1] + scale_roi[3]]
     cropped_thresh = thresh[scale_roi[0]:scale_roi[0] + scale_roi[2], scale_roi[1]:scale_roi[1] + scale_roi[3]]
@@ -63,6 +68,30 @@ def crop_scale_display(image, is_first_frame=False):
     processed_image = blurred
 
     return processed_image, cropped_gray, cropped_thresh
+
+def crop_scale2(image, is_first_frame=False):
+    global scale_roi
+
+    rotated_image = imageAnalysis.rotate_image(image, -90)
+    gray = cv2.cvtColor(rotated_image, cv2.COLOR_BGR2GRAY)
+    blurred_gray = cv2.GaussianBlur(gray, (7, 7), 0)
+
+    if is_first_frame:
+        blurred_gray = cv2.resize(blurred_gray, (0, 0), fx=2, fy=2)
+        dst = preprocess_image(blurred_gray)
+        digits_positions = find_digits(dst)
+        # get top line for cropping
+        top_line=digits_positions[0]
+        y0=top_line[0][1]-100
+        y1=top_line[1][1]
+        print ((y0, y1))
+
+        scale_roi=[int(y0/2), int(y1/2), 0, int(blurred_gray.shape[0]/2)]
+
+    cropped_image = rotated_image[scale_roi[0]:scale_roi[1], scale_roi[2]:scale_roi[3]]
+    cropped_gray = blurred_gray[scale_roi[0]:scale_roi[1], scale_roi[2]:scale_roi[3]]
+
+    return cropped_image, cropped_gray
 
 
 def preprocess_image(image):
@@ -265,20 +294,27 @@ def recognize_digits_area_method(digits_positions, output_img, input_img):
 
 
 def main():
-    cap = cv2.VideoCapture('Videos/06.mp4')
+    cap = cv2.VideoCapture('Videos/13.mp4')
 
     _, firstFrame = cap.read()
 
-    frame, _, _ = crop_scale_display(firstFrame, is_first_frame=True)
+    cv2.imshow("first_frame", firstFrame)
+
+    #frame, _, _ = crop_scale_display(firstFrame, is_first_frame=True)
+    #frame, _, _ = crop_scale3(firstFrame, is_first_frame=True)
+    frame, _=crop_scale2(firstFrame, True)
 
     while (cap.isOpened()):
         ret, frame = cap.read()
 
-        preprocessed_image, pre_gray, pre_thresh = crop_scale_display(frame)
+        #preprocessed_image, pre_gray, pre_thresh = crop_scale_display(frame)
+        #preprocessed_image, pre_gray, pre_thresh=crop_scale3(frame)
+        preprocessed_image, pre_gray=crop_scale2(frame)
 
         pre_gray = cv2.resize(pre_gray, (0, 0), fx=2, fy=2)
         dst = preprocess_image(pre_gray)
         digits_positions = find_digits(dst)
+        print(digits_positions[0])
         digits = recognize_digits_line_method(digits_positions, pre_gray, dst)
 
         # print(digits)

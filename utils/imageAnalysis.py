@@ -20,15 +20,18 @@ def detect_largest_circle(image):
     circles = cv2.HoughCircles(image, cv2.HOUGH_GRADIENT, 1, int(image.shape[1] / 2),
                                param1=50, param2=30, minRadius=int(image.shape[0] / 8),
                                maxRadius=int(image.shape[0] / 2))
+
     circles = numpy.uint16(numpy.around(circles))
 
     for i in circles[0, :]:
-        # draw the outer circle
-        cv2.circle(image, (i[0], i[1]), i[2], (0, 255, 0), 2)
-        # draw the center of the circle
-        cv2.circle(image, (i[0], i[1]), 2, (0, 0, 255), 3)
 
-        cv2.rectangle(image, (i[0] - i[2], i[1] - i[2]), (i[0] + i[2], i[1] + i[2]), (0, 255, 0), 2)
+        if VISUALIZE:
+            # draw the outer circle
+            cv2.circle(image, (i[0], i[1]), i[2], (0, 255, 0), 2)
+            # draw the center of the circle
+            cv2.circle(image, (i[0], i[1]), 2, (0, 0, 255), 3)
+
+            cv2.rectangle(image, (i[0] - i[2], i[1] - i[2]), (i[0] + i[2], i[1] + i[2]), (0, 255, 0), 2)
 
         return image, i[0], i[1], i[2]
         break
@@ -49,7 +52,8 @@ def detect_horizontal_lines(thresh_image, orig_image):
             # only consider border lines
             lower_boundary = thresh_image.shape[0]
             print((y1, lower_boundary))
-            if (y1 < lower_boundary*0.2 and y1>lower_boundary*0.05) or (y1 > lower_boundary * 0.8 and y1<lower_boundary*0.95):
+            if (y1 < lower_boundary * 0.2 and y1 > lower_boundary * 0.05) or (
+                    y1 > lower_boundary * 0.8 and y1 < lower_boundary * 0.95):
                 pt1 = (x1, y1)
                 pt2 = (x2, y2)
 
@@ -58,7 +62,7 @@ def detect_horizontal_lines(thresh_image, orig_image):
                     cv2.imshow("line", orig_image)
                     cv2.waitKey(0)
 
-                return y1
+                #return y1
 
 
 def run_threshold(image, lower_boundary, upper_boundary, threshold_index=0):
