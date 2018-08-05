@@ -65,7 +65,7 @@ def crop_scale_display(image, is_first_frame=False):
     blurred = cv2.GaussianBlur(cropped_image, (7, 7), 0)
     cropped_gray = cv2.GaussianBlur(cropped_gray, (5, 5), 0)
     # blurred = cv2.medianBlur(cropped_image, 5)
-    kernel = numpy.ones((7, 7), numpy.uint8)
+    # kernel = numpy.ones((7, 7), numpy.uint8)
     # processed_image = cv2.erode(blurred, kernel, iterations=1)
     processed_image = blurred
 
@@ -93,18 +93,21 @@ def crop_scale2(image, is_first_frame=False):
     cropped_image = rotated_image[scale_roi[0]:scale_roi[1], scale_roi[2]:scale_roi[3]]
     cropped_gray = blurred_gray[scale_roi[0]:scale_roi[1], scale_roi[2]:scale_roi[3]]
 
+    kernel = numpy.ones((3, 3), numpy.uint8)
+    # cropped_image = cv2.erode(cropped_image, kernel, iterations=1)
+    # cropped_gray = cv2.erode(cropped_gray, kernel, iterations=1)
+
     return cropped_image, cropped_gray
 
 
 def preprocess_image(image):
     clahe = cv2.createCLAHE(clipLimit=2, tileGridSize=(6, 6))
     img = clahe.apply(image)
-    # 自适应阈值二值化
     dst = cv2.adaptiveThreshold(img, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 127, 60)
-    # 闭运算开运算
     kernel = cv2.getStructuringElement(cv2.MORPH_CROSS, (5, 5))
     dst = cv2.morphologyEx(dst, cv2.MORPH_CLOSE, kernel, iterations=1)
     dst = cv2.morphologyEx(dst, cv2.MORPH_OPEN, kernel, iterations=2)
+
     cv2.imshow("", dst)
 
     return dst
@@ -125,10 +128,11 @@ def find_digits(image):
     assert len(digits_positions) > 0, "Failed to find digits's positions"
     return digits_positions
 
+
 def find_digits2(thresh_image, orig_image):
     kernel = cv2.getStructuringElement(cv2.MORPH_CROSS, (5, 5))
     thresh_image = cv2.morphologyEx(thresh_image, cv2.MORPH_DILATE, kernel, iterations=2)
-    #thresh_image = cv2.morphologyEx(thresh_image, cv2.MORPH_OPEN, kernel, iterations=2)
+    # thresh_image = cv2.morphologyEx(thresh_image, cv2.MORPH_OPEN, kernel, iterations=2)
 
     cnts = cv2.findContours(thresh_image.copy(), cv2.RETR_EXTERNAL,
                             cv2.CHAIN_APPROX_SIMPLE)
@@ -141,13 +145,10 @@ def find_digits2(thresh_image, orig_image):
         # compute the bounding box of the contour
         (x, y, w, h) = cv2.boundingRect(c)
 
-
-
         # if the contour is sufficiently large, it must be a digit
-        if (w >= thresh_image.shape[1]*0.02 and w<=thresh_image.shape[1]*0.3) and (h >= 10):
+        if (w >= thresh_image.shape[1] * 0.02 and w <= thresh_image.shape[1] * 0.3) and (h >= 10):
             cv2.rectangle(orig_image, (x, y), (x + w, y + h), (0, 255, 0), 1)
             digitCnts.append(c)
-
 
 
 def helper_extract(one_d_array, threshold=20):
@@ -310,17 +311,21 @@ def filter_digits(digit_list):
         if "*" in digits:
             while digits.count("*") > 0:
                 digits.remove("*")
-        # if len(digits) < 3:
+        if "." in digits:
+            while digits.count(".") > 0:
+                digits.remove(".")
+        # if len(digits) != 3:
         #     continue
 
         filtered_digits.append(digits)
-        filtered_digits.sort(key=len, reverse=True)
+    filtered_digits.sort(key=len, reverse=True)
+    filtered_digits = numpy.array(filtered_digits)
 
     return filtered_digits
 
 
 def main():
-    cap = cv2.VideoCapture('Videos/11.mp4')
+    cap = cv2.VideoCapture('Videos/01.mp4')
 
     _, firstFrame = cap.read()
 
@@ -329,24 +334,28 @@ def main():
     try:
         while (cap.isOpened()):
             ret, frame = cap.read()
+            alpha = float(1.6)
+            frame = cv2.multiply(frame, numpy.array([alpha]))
 
             preprocessed_image, pre_gray = crop_scale2(frame)
 
-
             pre_gray = cv2.resize(pre_gray, (0, 0), fx=2, fy=2)
             dst = preprocess_image(pre_gray)
-            find_digits2(dst, pre_gray)
-            #digits_positions = find_digits(dst)
+            # find_digits2(dst, pre_gray)
+            digits_positions = find_digits(dst)
 
-            #digits.append(recognize_digits_line_method(digits_positions, pre_gray, dst))
+            digits.append(recognize_digits_line_method(digits_positions, pre_gray, dst))
 
             cv2.imshow("Frame", pre_gray)
             cv2.imshow("dst", dst)
-            cv2.waitKey(0)
+            cv2.waitKey(1)
     except Exception as e:
         print(e)
 
-    #print(filter_digits(digits))
+    filtered_digits = (filter_digits(digits))
+    # first, second, third=filtered_digits.max(axis=0)
+    print(filtered_digits)
+    # print((first, second, third))
 
     cap.release()
     cv2.destroyAllWindows()
