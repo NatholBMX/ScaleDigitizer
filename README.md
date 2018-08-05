@@ -7,9 +7,17 @@ Extract numbers from a scale for analysis of weight change.
 
 # References 
 https://www.pyimagesearch.com/2017/02/13/recognizing-digits-with-opencv-and-python/
+
 https://github.com/suyashkumar/seven-segment-ocr
+
 https://www.kurokesu.com/main/2017/02/20/dumb-thermometer-gets-digital-output/
+
 https://github.com/kazmiekr/GasPumpOCR.git
+
+(Medium: https://hackernoon.com/building-a-gas-pump-scanner-with-opencv-python-ios-116fe6c9ae8b)
+
 https://github.com/bikz05/digit-recognition
+
 https://github.com/g-sari/pyautodigits
+
 https://towardsdatascience.com/scanned-digits-recognition-using-k-nearest-neighbor-k-nn-d1a1528f0dea
