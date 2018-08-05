@@ -2,6 +2,7 @@ import cv2
 import numpy
 import urllib.request, urllib.error, urllib.parse
 from utils import imageAnalysis
+import imutils
 
 from utils.imageAnalysis import DIGITS_LOOKUP
 
@@ -46,13 +47,14 @@ def crop_scale_display(image, is_first_frame=False):
 
         if CUTOFF_AT_HORIZONTAL_LINE:
             # crop image and detect borders to further modify ROI
-            cropped_image = rotated_image[scale_roi[0]:scale_roi[0] + scale_roi[2], scale_roi[1]:scale_roi[1] + scale_roi[3]]
+            cropped_image = rotated_image[scale_roi[0]:scale_roi[0] + scale_roi[2],
+                            scale_roi[1]:scale_roi[1] + scale_roi[3]]
             cropped_gray = gray[scale_roi[0]:scale_roi[0] + scale_roi[2], scale_roi[1]:scale_roi[1] + scale_roi[3]]
             cropped_thresh = thresh[scale_roi[0]:scale_roi[0] + scale_roi[2], scale_roi[1]:scale_roi[1] + scale_roi[3]]
-            borderY=imageAnalysis.detect_horizontal_lines(cropped_thresh, cropped_image)
+            borderY = imageAnalysis.detect_horizontal_lines(cropped_thresh, cropped_image)
             print((scale_roi, cropped_thresh.shape, borderY))
-            if borderY<=cropped_thresh.shape[0]/2:
-                scale_roi = (centerY - radius+borderY, centerX - radius, centerY + radius+borderY, centerX + radius)
+            if borderY <= cropped_thresh.shape[0] / 2:
+                scale_roi = (centerY - radius + borderY, centerX - radius, centerY + radius + borderY, centerX + radius)
             else:
                 scale_roi = (centerY - radius, centerX - radius, borderY, centerX + radius)
 
@@ -69,6 +71,7 @@ def crop_scale_display(image, is_first_frame=False):
 
     return processed_image, cropped_gray, cropped_thresh
 
+
 def crop_scale2(image, is_first_frame=False):
     global scale_roi
 
@@ -81,12 +84,11 @@ def crop_scale2(image, is_first_frame=False):
         dst = preprocess_image(blurred_gray)
         digits_positions = find_digits(dst)
         # get top line for cropping
-        top_line=digits_positions[0]
-        y0=top_line[0][1]-100
-        y1=top_line[1][1]
-        print ((y0, y1))
+        top_line = digits_positions[0]
+        y0 = top_line[0][1] - 100
+        y1 = top_line[1][1]
 
-        scale_roi=[int(y0/2), int(y1/2), 0, int(blurred_gray.shape[0]/2)]
+        scale_roi = [int(y0 / 2), int(y1 / 2), 0, int(blurred_gray.shape[0] / 2)]
 
     cropped_image = rotated_image[scale_roi[0]:scale_roi[1], scale_roi[2]:scale_roi[3]]
     cropped_gray = blurred_gray[scale_roi[0]:scale_roi[1], scale_roi[2]:scale_roi[3]]
@@ -122,6 +124,30 @@ def find_digits(image):
             digits_positions.append(list(zip(h, v)))
     assert len(digits_positions) > 0, "Failed to find digits's positions"
     return digits_positions
+
+def find_digits2(thresh_image, orig_image):
+    kernel = cv2.getStructuringElement(cv2.MORPH_CROSS, (5, 5))
+    thresh_image = cv2.morphologyEx(thresh_image, cv2.MORPH_DILATE, kernel, iterations=2)
+    #thresh_image = cv2.morphologyEx(thresh_image, cv2.MORPH_OPEN, kernel, iterations=2)
+
+    cnts = cv2.findContours(thresh_image.copy(), cv2.RETR_EXTERNAL,
+                            cv2.CHAIN_APPROX_SIMPLE)
+    cnts = cnts[0] if imutils.is_cv2() else cnts[1]
+    digitCnts = []
+    cv2.imshow("threshed", thresh_image)
+
+    # loop over the digit area candidates
+    for c in cnts:
+        # compute the bounding box of the contour
+        (x, y, w, h) = cv2.boundingRect(c)
+
+
+
+        # if the contour is sufficiently large, it must be a digit
+        if (w >= thresh_image.shape[1]*0.02 and w<=thresh_image.shape[1]*0.3) and (h >= 10):
+            cv2.rectangle(orig_image, (x, y), (x + w, y + h), (0, 255, 0), 1)
+            digitCnts.append(c)
+
 
 
 def helper_extract(one_d_array, threshold=20):
@@ -240,14 +266,6 @@ def recognize_digits_area_method(digits_positions, output_img, input_img):
         small_delta = int(h / 6.0) // 4
         # print('small_delta : ', small_delta)
         segments = [
-            # # version 1
-            # ((w - width, width // 2), (w, (h - dhc) // 2)),
-            # ((w - width - small_delta, (h + dhc) // 2), (w - small_delta, h - width // 2)),
-            # ((width // 2, h - width), (w - width // 2, h)),
-            # ((0, (h + dhc) // 2), (width, h - width // 2)),
-            # ((small_delta, width // 2), (small_delta + width, (h - dhc) // 2)),
-            # ((small_delta, 0), (w, width)),
-            # ((width, (h - dhc) // 2), (w - width, (h + dhc) // 2))
 
             # # version 2
             ((w - width - small_delta, width // 2), (w, (h - dhc) // 2)),
@@ -258,16 +276,7 @@ def recognize_digits_area_method(digits_positions, output_img, input_img):
             ((small_delta, 0), (w + small_delta, width)),
             ((width - small_delta, (h - dhc) // 2), (w - width - small_delta, (h + dhc) // 2))
         ]
-        # cv2.rectangle(roi, segments[0][0], segments[0][1], (128, 0, 0), 2)
-        # cv2.rectangle(roi, segments[1][0], segments[1][1], (128, 0, 0), 2)
-        # cv2.rectangle(roi, segments[2][0], segments[2][1], (128, 0, 0), 2)
-        # cv2.rectangle(roi, segments[3][0], segments[3][1], (128, 0, 0), 2)
-        # cv2.rectangle(roi, segments[4][0], segments[4][1], (128, 0, 0), 2)
-        # cv2.rectangle(roi, segments[5][0], segments[5][1], (128, 0, 0), 2)
-        # cv2.rectangle(roi, segments[6][0], segments[6][1], (128, 0, 0), 2)
-        # cv2.imshow('i', roi)
-        # cv2.waitKey()
-        # cv2.destroyWindow('i')
+
         on = [0] * len(segments)
 
         for (i, ((xa, ya), (xb, yb))) in enumerate(segments):
@@ -293,33 +302,51 @@ def recognize_digits_area_method(digits_positions, output_img, input_img):
     return digits
 
 
+def filter_digits(digit_list):
+    filtered_digits = []
+    for digits in digit_list:
+        if all(x == digits[0] for x in digits):
+            continue
+        if "*" in digits:
+            while digits.count("*") > 0:
+                digits.remove("*")
+        # if len(digits) < 3:
+        #     continue
+
+        filtered_digits.append(digits)
+        filtered_digits.sort(key=len, reverse=True)
+
+    return filtered_digits
+
+
 def main():
-    cap = cv2.VideoCapture('Videos/13.mp4')
+    cap = cv2.VideoCapture('Videos/11.mp4')
 
     _, firstFrame = cap.read()
 
-    cv2.imshow("first_frame", firstFrame)
+    frame, _ = crop_scale2(firstFrame, True)
+    digits = []
+    try:
+        while (cap.isOpened()):
+            ret, frame = cap.read()
 
-    #frame, _, _ = crop_scale_display(firstFrame, is_first_frame=True)
-    #frame, _, _ = crop_scale3(firstFrame, is_first_frame=True)
-    frame, _=crop_scale2(firstFrame, True)
+            preprocessed_image, pre_gray = crop_scale2(frame)
 
-    while (cap.isOpened()):
-        ret, frame = cap.read()
 
-        #preprocessed_image, pre_gray, pre_thresh = crop_scale_display(frame)
-        #preprocessed_image, pre_gray, pre_thresh=crop_scale3(frame)
-        preprocessed_image, pre_gray=crop_scale2(frame)
+            pre_gray = cv2.resize(pre_gray, (0, 0), fx=2, fy=2)
+            dst = preprocess_image(pre_gray)
+            find_digits2(dst, pre_gray)
+            #digits_positions = find_digits(dst)
 
-        pre_gray = cv2.resize(pre_gray, (0, 0), fx=2, fy=2)
-        dst = preprocess_image(pre_gray)
-        digits_positions = find_digits(dst)
-        print(digits_positions[0])
-        digits = recognize_digits_line_method(digits_positions, pre_gray, dst)
+            #digits.append(recognize_digits_line_method(digits_positions, pre_gray, dst))
 
-        # print(digits)
-        cv2.imshow("Frame", pre_gray)
-        cv2.waitKey(0)
+            cv2.imshow("Frame", pre_gray)
+            cv2.imshow("dst", dst)
+            cv2.waitKey(0)
+    except Exception as e:
+        print(e)
+
+    #print(filter_digits(digits))
 
     cap.release()
     cv2.destroyAllWindows()
