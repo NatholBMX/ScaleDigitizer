@@ -178,6 +178,8 @@ def helper_extract(one_d_array, threshold=20):
 
 def recognize_digits_line_method(digits_positions, output_img, input_img):
     digits = []
+    # reverse digit list so we read from right to left
+    digits_positions = list(reversed(digits_positions))
     for c in digits_positions:
         x0, y0 = c[0]
         x1, y1 = c[1]
@@ -230,8 +232,6 @@ def recognize_digits_line_method(digits_positions, output_img, input_img):
 
         digits.append(digit)
 
-        # 小数点的识别
-        # print('dot signal: ',cv2.countNonZero(roi[h - int(3 * width / 4):h, w - int(3 * width / 4):w]) / (9 / 16 * width * width))
         if cv2.countNonZero(roi[h - int(3 * width / 4):h, w - int(3 * width / 4):w]) / (9 / 16 * width * width) > 0.65:
             digits.append('.')
             cv2.rectangle(output_img,
@@ -243,6 +243,7 @@ def recognize_digits_line_method(digits_positions, output_img, input_img):
 
         cv2.rectangle(output_img, (x0, y0), (x1, y1), (0, 128, 0), 2)
         cv2.putText(output_img, str(digit), (x0 + 3, y0 + 10), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 128, 0), 2)
+
     return digits
 
 
@@ -314,8 +315,6 @@ def filter_digits(digit_list):
         if "." in digits:
             while digits.count(".") > 0:
                 digits.remove(".")
-        # if len(digits) != 3:
-        #     continue
 
         filtered_digits.append(digits)
     filtered_digits.sort(key=len, reverse=True)
@@ -325,7 +324,7 @@ def filter_digits(digit_list):
 
 
 def main():
-    cap = cv2.VideoCapture('Videos/01.mp4')
+    cap = cv2.VideoCapture('Videos/12.mp4')
 
     _, firstFrame = cap.read()
 
@@ -341,7 +340,6 @@ def main():
 
             pre_gray = cv2.resize(pre_gray, (0, 0), fx=2, fy=2)
             dst = preprocess_image(pre_gray)
-            # find_digits2(dst, pre_gray)
             digits_positions = find_digits(dst)
 
             digits.append(recognize_digits_line_method(digits_positions, pre_gray, dst))
