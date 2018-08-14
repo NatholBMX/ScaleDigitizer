@@ -14,7 +14,7 @@ TRAINING_DIR_PATH="./training/"
 
 def extract_digits(gray_image, digit_positions):
     training_img_list=os.listdir(TRAINING_DIR_PATH)
-    
+
     if len(training_img_list)==0:
         counter=0
     else:

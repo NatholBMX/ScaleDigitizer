@@ -4,7 +4,8 @@ Module for running predictions with fast ai model
 from fastai.conv_learner import *
 from fastai.models.cifar10.resnext import resnext29_8_64
 
-PATH = "data/"
+#PATH = "data/"
+PATH = "D:\\Code\\TEMP\\ScaleDigitizer\\data\\"
 CLASSES = ('0', '1', '2', '3', '4', '5', '6', '7', '8', '9')
 STATS = (np.array([0.4914, 0.48216, 0.44653]), np.array([0.24703, 0.24349, 0.26159]))
 
@@ -44,5 +45,5 @@ def predict_from_model(image):
 
 if __name__ == '__main__':
     init_model()
-    prediction = predict_from_model(open_image('./data/test/8/758.jpg'))
+    prediction = predict_from_model(open_image('D:\\Code\\TEMP\\ScaleDigitizer\\data\\test\\8\\758.jpg'))
     print(prediction)
