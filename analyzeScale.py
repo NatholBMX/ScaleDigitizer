@@ -3,11 +3,13 @@ import numpy
 import urllib.request, urllib.error, urllib.parse
 from utils import imageAnalysis
 import imutils
+from utils import predictionFastai
 
 from utils.imageAnalysis import DIGITS_LOOKUP
 
 USE_WEBCAM = False
 CUTOFF_AT_HORIZONTAL_LINE = False
+VISUALIZE = False
 
 if not USE_WEBCAM:
     host = "172.16.50.74:8080"
@@ -107,8 +109,6 @@ def preprocess_image(image):
     kernel = cv2.getStructuringElement(cv2.MORPH_CROSS, (5, 5))
     dst = cv2.morphologyEx(dst, cv2.MORPH_CLOSE, kernel, iterations=1)
     dst = cv2.morphologyEx(dst, cv2.MORPH_OPEN, kernel, iterations=2)
-
-    cv2.imshow("", dst)
 
     return dst
 
@@ -324,7 +324,8 @@ def filter_digits(digit_list):
 
 
 def main():
-    cap = cv2.VideoCapture('Videos/12.mp4')
+    predictionFastai.init_model()
+    cap = cv2.VideoCapture('Videos/22.mp4')
 
     _, firstFrame = cap.read()
 
@@ -342,17 +343,21 @@ def main():
             dst = preprocess_image(pre_gray)
             digits_positions = find_digits(dst)
 
-            digits.append(recognize_digits_line_method(digits_positions, pre_gray, dst))
+            #digits.append(recognize_digits_line_method(digits_positions, pre_gray, dst))
+            predictions=predictionFastai.recognize_digits(digits_positions, pre_gray, dst)
+            print(predictions)
+            digits.append(predictions)
 
-            cv2.imshow("Frame", pre_gray)
-            cv2.imshow("dst", dst)
-            cv2.waitKey(1)
+            if VISUALIZE:
+                cv2.imshow("Frame", pre_gray)
+                cv2.imshow("dst", dst)
+                cv2.waitKey(1)
     except Exception as e:
         print(e)
 
-    filtered_digits = (filter_digits(digits))
+    #filtered_digits = (filter_digits(digits))
     # first, second, third=filtered_digits.max(axis=0)
-    print(filtered_digits)
+    #print(filtered_digits)
     # print((first, second, third))
 
     cap.release()

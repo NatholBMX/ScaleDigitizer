@@ -20,7 +20,6 @@ def extract_digits(gray_image, digit_positions):
     else:
         counter=int(training_img_list[-1].split(".")[0])
 
-
     for digit in digit_positions:
         x0, y0 = digit[0]
         x1, y1 = digit[1]
