@@ -17,7 +17,7 @@ binary_adaptive = threshold_adaptive(image, block_size, offset = 10)
 
 cvimg = img_as_ubyte(binary_adaptive)
 cvimg = cv2.medianBlur(cvimg, 3)
-#cvimg = cv2.GaussianBlur(cvimg, (5, 5), 2)
+cvimg = cv2.GaussianBlur(cvimg, (5, 5), 2)
 
 gs = gridspec.GridSpec(2, 2)
 ax0 = plt.subplot(gs[0, 0])
