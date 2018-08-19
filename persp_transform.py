@@ -4,6 +4,8 @@ import argparse
 import numpy as np
 from operator import itemgetter
 import imutils.perspective
+from skimage import img_as_ubyte
+from skimage.filters import threshold_adaptive
 
 def get_biggest_difference(lines):
     #there's probably an OpenCV function for this
@@ -118,12 +120,24 @@ while True:
         py, px, _ = persp.shape
         if py > px:
             persp = imutils.rotate_bound(persp, 90)
+            py, px, _ = persp.shape
 
-    cv2.imshow("lines", lines2)
-    cv2.imshow("Press 'q' to exit", img)
+        perspgray = cv2.cvtColor(persp, cv2.COLOR_BGR2GRAY)
+        #use skimage to do adaptive thresholding
+        perspgray = threshold_adaptive(perspgray, block_size = 89, offset = 10)
+        #convert back to cv2
+        perspgray = img_as_ubyte(perspgray)
+        #blur a bit to get rid of small specks
+        perspgray = cv2.medianBlur(perspgray, 5)
+        perspgray = cv2.GaussianBlur(perspgray, (3, 3), 2)
+        perspgray = cv2.bitwise_not(perspgray)
+
     try:
         cv2.imshow("persp", persp)
+        cv2.imshow("perspgray", perspgray)
     except NameError:
         pass
+    cv2.imshow("lines", lines2)
+    cv2.imshow("box", img)
     if cv2.waitKey(1) & 0xFF == ord("q"):
         break
