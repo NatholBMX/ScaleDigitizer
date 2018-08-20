@@ -5,9 +5,8 @@ Script for running over all videos and cropping images for training
 import os
 import cv2
 import numpy
-from utils import imageAnalysis
-import imutils
-import analyzeScale
+
+import utils.deprecated_methods
 
 VIDEOS_DIR_PATH= "./videos/"
 TRAINING_DIR_PATH="./training/"
@@ -39,22 +38,21 @@ def main():
         cap = cv2.VideoCapture(VIDEOS_DIR_PATH + video)
         _, firstFrame = cap.read()
 
-        frame, _ = analyzeScale.crop_scale2(firstFrame, True)
-        digits = []
+        frame, _ = utils.deprecated_methods.crop_scale2(firstFrame, True)
+
         try:
             while (cap.isOpened()):
                 ret, frame = cap.read()
                 alpha = float(1.6)
                 frame = cv2.multiply(frame, numpy.array([alpha]))
 
-                preprocessed_image, pre_gray = analyzeScale.crop_scale2(frame)
+                preprocessed_image, pre_gray = utils.deprecated_methods.crop_scale2(frame)
 
                 pre_gray = cv2.resize(pre_gray, (0, 0), fx=2, fy=2)
-                dst = analyzeScale.preprocess_image(pre_gray)
-                digits_positions = analyzeScale.find_digits(dst)
+                dst = utils.deprecated_methods.preprocess_image(pre_gray)
+                digits_positions = utils.deprecated_methods.find_digits(dst)
                 extract_digits(dst, digits_positions)
 
-                #digits.append(analyzeScale.recognize_digits_line_method(digits_positions, pre_gray, dst))
 
         except Exception as e:
             print(e)
