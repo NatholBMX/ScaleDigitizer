@@ -1,14 +1,15 @@
 import cv2
 import numpy
 import urllib.request, urllib.error, urllib.parse
-from utils import imageAnalysis
 import imutils
-from utils import predictionFastai
+from operator import itemgetter
+from skimage import img_as_ubyte
+from skimage.filters import threshold_local
 
+from utils.deprecated_methods import crop_scale2, preprocess_image, find_digits
 from utils.imageAnalysis import DIGITS_LOOKUP
 
 USE_WEBCAM = False
-CUTOFF_AT_HORIZONTAL_LINE = False
 VISUALIZE = False
 
 if not USE_WEBCAM:
@@ -16,7 +17,6 @@ if not USE_WEBCAM:
     hoststream = 'http://' + host + '/shot.jpg'
 
 # Region of interest for scale display
-scale_roi = None
 
 
 def get_img_from_stream():
@@ -31,155 +31,168 @@ def get_img_from_stream():
     return img
 
 
-def crop_scale_display(image, is_first_frame=False):
-    global scale_roi
+def get_biggest_difference(lines):
+    # there's probably an OpenCV function for this
+    xs = [i[0] for i in lines]
+    biggest = 0
+    biggestid = 0
+    for i in range(1, len(xs)):
+        dif = xs[i] - xs[i - 1]
+        if dif > biggest:
+            biggest = dif
+            biggestid = i
 
-    rotated_image = imageAnalysis.rotate_image(image, -90)
-    rotated_image2 = cv2.fastNlMeansDenoisingColored(rotated_image, None, 10, 10, 7, 21)
-    gray = cv2.cvtColor(rotated_image, cv2.COLOR_BGR2GRAY)
-    thresh = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 27, -40)
-
-    gray2 = cv2.cvtColor(rotated_image2, cv2.COLOR_BGR2GRAY)
-    thresh2 = cv2.adaptiveThreshold(gray2, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 27, -40)
-
-    # extract the scale display ROI from the first frame by finding the largest center circle
-    if is_first_frame:
-        _, centerX, centerY, radius = imageAnalysis.detect_largest_circle(thresh)
-        scale_roi = (centerY - radius, centerX - radius, centerY + radius, centerX + radius)
-
-        if CUTOFF_AT_HORIZONTAL_LINE:
-            # crop image and detect borders to further modify ROI
-            cropped_image = rotated_image[scale_roi[0]:scale_roi[0] + scale_roi[2],
-                            scale_roi[1]:scale_roi[1] + scale_roi[3]]
-            cropped_gray = gray[scale_roi[0]:scale_roi[0] + scale_roi[2], scale_roi[1]:scale_roi[1] + scale_roi[3]]
-            cropped_thresh = thresh[scale_roi[0]:scale_roi[0] + scale_roi[2], scale_roi[1]:scale_roi[1] + scale_roi[3]]
-            borderY = imageAnalysis.detect_horizontal_lines(cropped_thresh, cropped_image)
-            print((scale_roi, cropped_thresh.shape, borderY))
-            if borderY <= cropped_thresh.shape[0] / 2:
-                scale_roi = (centerY - radius + borderY, centerX - radius, centerY + radius + borderY, centerX + radius)
-            else:
-                scale_roi = (centerY - radius, centerX - radius, borderY, centerX + radius)
-
-    cropped_image = rotated_image[scale_roi[0]:scale_roi[0] + scale_roi[2], scale_roi[1]:scale_roi[1] + scale_roi[3]]
-    cropped_gray = gray[scale_roi[0]:scale_roi[0] + scale_roi[2], scale_roi[1]:scale_roi[1] + scale_roi[3]]
-    cropped_thresh = thresh[scale_roi[0]:scale_roi[0] + scale_roi[2], scale_roi[1]:scale_roi[1] + scale_roi[3]]
-
-    blurred = cv2.GaussianBlur(cropped_image, (7, 7), 0)
-    cropped_gray = cv2.GaussianBlur(cropped_gray, (5, 5), 0)
-    # blurred = cv2.medianBlur(cropped_image, 5)
-    # kernel = numpy.ones((7, 7), numpy.uint8)
-    # processed_image = cv2.erode(blurred, kernel, iterations=1)
-    processed_image = blurred
-
-    return processed_image, cropped_gray, cropped_thresh
+    return biggestid - 1, biggestid
 
 
-def crop_scale2(image, is_first_frame=False):
-    global scale_roi
-
-    rotated_image = imageAnalysis.rotate_image(image, -90)
-    gray = cv2.cvtColor(rotated_image, cv2.COLOR_BGR2GRAY)
-    blurred_gray = cv2.GaussianBlur(gray, (7, 7), 0)
-
-    if is_first_frame:
-        blurred_gray = cv2.resize(blurred_gray, (0, 0), fx=2, fy=2)
-        dst = preprocess_image(blurred_gray)
-        digits_positions = find_digits(dst)
-        # get top line for cropping
-        top_line = digits_positions[0]
-        y0 = top_line[0][1] - 100
-        y1 = top_line[1][1]
-
-        scale_roi = [int(y0 / 2), int(y1 / 2), 0, int(blurred_gray.shape[0] / 2)]
-
-    cropped_image = rotated_image[scale_roi[0]:scale_roi[1], scale_roi[2]:scale_roi[3]]
-    cropped_gray = blurred_gray[scale_roi[0]:scale_roi[1], scale_roi[2]:scale_roi[3]]
-
-    kernel = numpy.ones((3, 3), numpy.uint8)
-    # cropped_image = cv2.erode(cropped_image, kernel, iterations=1)
-    # cropped_gray = cv2.erode(cropped_gray, kernel, iterations=1)
-
-    return cropped_image, cropped_gray
+def contours_to_points(contour):
+    # this is NOT how you are supposed to do this
+    bbar = 20
+    pts = str(contour).split("\n")
+    pts = sorted(
+        [[int(i) for i in pt.replace("[", "").replace("]", "").split(" ") if i != ""] for pt in pts if pt != ""],
+        key=itemgetter(1))
+    return [[pts[0][0], pts[0][1] + bbar], [pts[-1][0], pts[-1][1] + bbar]]
 
 
 def preprocess_image(image):
-    clahe = cv2.createCLAHE(clipLimit=2, tileGridSize=(6, 6))
-    img = clahe.apply(image)
-    dst = cv2.adaptiveThreshold(img, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 127, 60)
-    kernel = cv2.getStructuringElement(cv2.MORPH_CROSS, (5, 5))
-    dst = cv2.morphologyEx(dst, cv2.MORPH_CLOSE, kernel, iterations=1)
-    dst = cv2.morphologyEx(dst, cv2.MORPH_OPEN, kernel, iterations=2)
+    # blur and convert to grayscale
+    gray = cv2.GaussianBlur(image, (11, 11), 0)
+    gray = cv2.cvtColor(gray, cv2.COLOR_BGR2GRAY)
 
-    return dst
+    # canny edge detection
+    canny = cv2.Canny(gray, 3, 25)
+
+    # hough lines
+    lines = cv2.HoughLines(canny, 1, numpy.pi / 180, 150)
+    linecoords = []
+    for line in lines:
+        for rho, theta in line:
+            a = numpy.cos(theta)
+            b = numpy.sin(theta)
+            x0 = a * rho
+            y0 = b * rho
+            x1 = int(x0 + 1000 * (-b))
+            y1 = int(y0 + 1000 * (a))
+            x2 = int(x0 - 1000 * (-b))
+            y2 = int(y0 - 1000 * (a))
+
+            linecoords.append([x1, y1, x2, y2])
+
+    # find the biggest space between lines
+    lines = sorted(linecoords, key=itemgetter(0))
+    biggest_difference = get_biggest_difference(lines)
+
+    y, x, _ = image.shape
+
+    #   p1------p2
+    #   |        |
+    #   |        |
+    #   p3------p4
+
+    p1 = (lines[biggest_difference[0]][0], lines[biggest_difference[0]][1])
+    p3 = (lines[biggest_difference[0]][2], lines[biggest_difference[0]][3])
+    p2 = (lines[biggest_difference[1]][0], lines[biggest_difference[1]][1])
+    p4 = (lines[biggest_difference[1]][2], lines[biggest_difference[1]][3])
+
+    orig = image.copy()
+    lines = image.copy()
+    lines2 = image.copy()
+    # draw lines with biggesr space on lines with green lines
+    lines = cv2.line(lines, p1, p3, (0, 255, 0), 1)
+    lines = cv2.line(lines, p2, p4, (0, 255, 0), 1)
+
+    # purely to see what's going on, also draw on a normal image
+    lines2 = cv2.line(lines2, p1, p3, (0, 255, 0), 2)
+    lines2 = cv2.line(lines2, p2, p4, (0, 255, 0), 2)
+
+    # threshold lines image and find contours
+    lines = cv2.cvtColor(lines, cv2.COLOR_BGR2HSV)
+    lines = cv2.inRange(lines, (0, 255, 255), (255, 255, 255))
+    cnts = cv2.findContours(lines.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)[1]
+
+    # draw black bars
+    bbar = 20
+    image = cv2.copyMakeBorder(image, bbar, bbar, 0, 0, cv2.BORDER_CONSTANT)
+    orig = cv2.copyMakeBorder(orig, bbar, bbar, 0, 0, cv2.BORDER_CONSTANT)
+
+    # only proceed if two contours are found
+    if len(cnts) == 2:
+        # convert contours into strings and append them to a list
+        cntpts = []
+        for c in cnts:
+            pts = contours_to_points(c)
+            cntpts.append(pts)
+
+        # convert list into one big contour
+        allcontours = numpy.array(cntpts).reshape((-1, 1, 2)).astype(numpy.int32)
+
+        # draw find bounding box
+        rect = cv2.minAreaRect(allcontours)
+        box = cv2.boxPoints(rect)
+        box = numpy.int0(box)
+        cv2.drawContours(image, [box], 0, (0, 0, 255), 2)
+
+        # perspective transform
+        cropped = imutils.perspective.four_point_transform(orig, box.reshape(4, 2))
+
+        # rotate image
+        py, px, _ = cropped.shape
+        if py > px:
+            cropped = imutils.rotate_bound(cropped, 90)
+            py, px, _ = cropped.shape
+
+        cropped_gray = cv2.cvtColor(cropped, cv2.COLOR_BGR2GRAY)
+        # use skimage to do adaptive thresholding
+        adaptive_thresh = threshold_local(cropped_gray, block_size=89, offset=10)
+        cropped_gray = cropped_gray > adaptive_thresh
+
+        # convert back to cv2
+        cropped_gray = img_as_ubyte(cropped_gray)
+        # blur a bit to get rid of small specks
+        cropped_gray = cv2.medianBlur(cropped_gray, 5)
+        cropped_gray = cv2.GaussianBlur(cropped_gray, (3, 3), 2)
+
+    cropped_gray = cv2.bitwise_not(cropped_gray)
+    return cropped, cropped_gray
 
 
-def find_digits(image):
-    digits_positions = []
-    img_array = numpy.sum(image, axis=0)
-    horizon_position = helper_extract(img_array, threshold=20)
-    img_array = numpy.sum(image, axis=1)
-    vertical_position = helper_extract(img_array, threshold=20 * 4)
-    # make vertical_position has only one element
-    if len(vertical_position) > 1:
-        vertical_position = [(vertical_position[0][0], vertical_position[len(vertical_position) - 1][1])]
-    for h in horizon_position:
-        for v in vertical_position:
-            digits_positions.append(list(zip(h, v)))
-    assert len(digits_positions) > 0, "Failed to find digits's positions"
-    return digits_positions
-
-
-def find_digits2(thresh_image, orig_image):
-    kernel = cv2.getStructuringElement(cv2.MORPH_CROSS, (5, 5))
-    thresh_image = cv2.morphologyEx(thresh_image, cv2.MORPH_DILATE, kernel, iterations=2)
+def find_digits(thresh_image, orig_image):
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 5))
+    thresh_image = cv2.morphologyEx(thresh_image, cv2.MORPH_DILATE, kernel, iterations=1)
     # thresh_image = cv2.morphologyEx(thresh_image, cv2.MORPH_OPEN, kernel, iterations=2)
 
     cnts = cv2.findContours(thresh_image.copy(), cv2.RETR_EXTERNAL,
                             cv2.CHAIN_APPROX_SIMPLE)
     cnts = cnts[0] if imutils.is_cv2() else cnts[1]
     digitCnts = []
-    cv2.imshow("threshed", thresh_image)
+    # cv2.imshow("threshed", thresh_image)
 
     # loop over the digit area candidates
+    digits_positions = []
     for c in cnts:
         # compute the bounding box of the contour
         (x, y, w, h) = cv2.boundingRect(c)
 
         # if the contour is sufficiently large, it must be a digit
-        if (w >= thresh_image.shape[1] * 0.02 and w <= thresh_image.shape[1] * 0.3) and (h >= 10):
+        if (w >= thresh_image.shape[1] * 0.02 and w <= thresh_image.shape[1] * 0.4) and (
+                h >= thresh_image.shape[0] * 0.2 and h <= thresh_image.shape[0] * 0.6):
             cv2.rectangle(orig_image, (x, y), (x + w, y + h), (0, 255, 0), 1)
             digitCnts.append(c)
+            x0 = x
+            y0 = y
+            x1 = x + w
+            y1 = y + h
 
+            digits_positions.append(((x0, y0), (x1, y1)))
 
-def helper_extract(one_d_array, threshold=20):
-    res = []
-    flag = 0
-    temp = 0
-    for i in range(len(one_d_array)):
-        if one_d_array[i] < 8 * 255:
-            if flag > threshold:
-                start = i - flag
-                end = i
-                temp = end
-                if end - start > 20:
-                    res.append((start, end))
-            flag = 0
-        else:
-            flag += 1
-
-    else:
-        if flag > threshold:
-            start = temp
-            end = len(one_d_array)
-            if end - start > 50:
-                res.append((start, end))
-    return res
+    return digits_positions
 
 
 def recognize_digits_line_method(digits_positions, output_img, input_img):
     digits = []
     # reverse digit list so we read from right to left
-    digits_positions = list(reversed(digits_positions))
+    # digits_positions = list(reversed(digits_positions))
     for c in digits_positions:
         x0, y0 = c[0]
         x1, y1 = c[1]
@@ -315,6 +328,8 @@ def filter_digits(digit_list):
         if "." in digits:
             while digits.count(".") > 0:
                 digits.remove(".")
+        if len(digits) != 3:
+            continue
 
         filtered_digits.append(digits)
     filtered_digits.sort(key=len, reverse=True)
@@ -323,9 +338,15 @@ def filter_digits(digit_list):
     return filtered_digits
 
 
-def main():
-    predictionFastai.init_model()
-    cap = cv2.VideoCapture('Videos/22.mp4')
+def get_most_frequent(digit_list):
+    uniques, counts = numpy.unique(digit_list, return_counts=True, axis=0)
+    max_index = numpy.argmax(counts)
+
+    return uniques[max_index]
+
+
+def main2():
+    cap = cv2.VideoCapture('Videos/12.mp4')
 
     _, firstFrame = cap.read()
 
@@ -343,25 +364,45 @@ def main():
             dst = preprocess_image(pre_gray)
             digits_positions = find_digits(dst)
 
-            #digits.append(recognize_digits_line_method(digits_positions, pre_gray, dst))
-            predictions=predictionFastai.recognize_digits(digits_positions, pre_gray, dst)
-            print(predictions)
-            digits.append(predictions)
+            digits.append(recognize_digits_line_method(digits_positions, pre_gray, dst))
 
-            if VISUALIZE:
-                cv2.imshow("Frame", pre_gray)
-                cv2.imshow("dst", dst)
-                cv2.waitKey(1)
+            cv2.imshow("Frame", pre_gray)
+            cv2.imshow("dst", dst)
+            cv2.waitKey(1)
     except Exception as e:
         print(e)
 
-    #filtered_digits = (filter_digits(digits))
+    filtered_digits = (filter_digits(digits))
     # first, second, third=filtered_digits.max(axis=0)
-    #print(filtered_digits)
+    print(filtered_digits)
     # print((first, second, third))
 
     cap.release()
     cv2.destroyAllWindows()
+
+
+def main():
+    cap = cv2.VideoCapture('Videos/22.mp4')
+    digits = []
+    try:
+        while (cap.isOpened()):
+            ret, frame = cap.read()
+            cropped, cropped_gray = preprocess_image(frame)
+
+            digit_pos = find_digits(cropped_gray, cropped)
+
+            digits.append(recognize_digits_line_method(digit_pos, cropped, cropped_gray))
+
+            if VISUALIZE:
+                cv2.imshow("1", cropped)
+                cv2.imshow("2", cropped_gray)
+
+                cv2.waitKey(1)
+    except Exception as e:
+        print(e)
+    filtered_digits = filter_digits(digits)
+
+    print(get_most_frequent(filtered_digits))
 
 
 if __name__ == '__main__':
