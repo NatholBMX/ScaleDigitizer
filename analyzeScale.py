@@ -6,6 +6,7 @@ from operator import itemgetter
 from skimage import img_as_ubyte
 from skimage.filters import threshold_local
 import os
+import pickle
 
 from utils.deprecated_methods import crop_scale2, preprocess_image, find_digits
 from utils.imageAnalysis import DIGITS_LOOKUP
@@ -13,11 +14,13 @@ from utils.imageAnalysis import DIGITS_LOOKUP
 USE_WEBCAM = False
 VISUALIZE = False
 
-VIDEOS_DIR_PATH= "./videos2/"
+VIDEOS_DIR_PATH = "./videos2/"
+DATABASE_PATH = "./database/data"
 
 if not USE_WEBCAM:
     host = "172.16.50.74:8080"
     hoststream = 'http://' + host + '/shot.jpg'
+
 
 # Region of interest for scale display
 
@@ -347,15 +350,43 @@ def get_most_frequent(digit_list):
 
     return uniques[max_index]
 
-def array_to_integer(array):
-    results=[]
-    for digits in array:
-        digits=reversed(digits)
-        current_digit=0
-        for i, value in enumerate(digits):
-            current_digit=current_digit+value*(10**i)
-        results.append(current_digit)
 
+def get_average_from_array(array):
+    sum = 0
+    for digits in array:
+        digits = reversed(digits)
+        current_digit = 0
+        for i, value in enumerate(digits):
+            current_digit = current_digit + value * (10 ** i)
+        sum += current_digit
+
+    average = sum / len(array)
+
+    return average / 10
+
+
+def save_to_database(average):
+    if not os.path.isfile(DATABASE_PATH):
+        pickle.dump(average, open(DATABASE_PATH, "wb"))
+        return
+
+    last_value = read_all_from_database()[-1]
+    relative_change = last_value - average
+
+    pickle.dump(average, open(DATABASE_PATH, "ab"))
+
+    return relative_change
+
+
+def read_all_from_database():
+    results = []
+    with open(DATABASE_PATH, "rb") as file_stream:
+        while True:
+            try:
+                results.append(pickle.load(file_stream))
+            except EOFError:
+                break
+    return results
 
 
 def main2():
@@ -395,8 +426,8 @@ def main2():
 
 
 def main():
-    video_list=os.listdir(VIDEOS_DIR_PATH)
-    digits_for_week=[]
+    video_list = os.listdir(VIDEOS_DIR_PATH)
+    digits_for_week = []
 
     for video in video_list:
         cap = cv2.VideoCapture(VIDEOS_DIR_PATH + video)
@@ -418,11 +449,12 @@ def main():
         except Exception as e:
             print(e)
         filtered_digits = filter_digits(digits)
-        if len(filtered_digits)>0:
+        if len(filtered_digits) > 0:
             digits_for_week.append(get_most_frequent(filtered_digits))
 
-    print(digits_for_week)
-    print(array_to_integer(digits_for_week))
+    average = get_average_from_array(digits_for_week)
+    relative_change = save_to_database(average)
+    print(relative_change)
 
 
 if __name__ == '__main__':
