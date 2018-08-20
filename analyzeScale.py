@@ -5,12 +5,15 @@ import imutils
 from operator import itemgetter
 from skimage import img_as_ubyte
 from skimage.filters import threshold_local
+import os
 
 from utils.deprecated_methods import crop_scale2, preprocess_image, find_digits
 from utils.imageAnalysis import DIGITS_LOOKUP
 
 USE_WEBCAM = False
 VISUALIZE = False
+
+VIDEOS_DIR_PATH= "./videos2/"
 
 if not USE_WEBCAM:
     host = "172.16.50.74:8080"
@@ -344,6 +347,16 @@ def get_most_frequent(digit_list):
 
     return uniques[max_index]
 
+def array_to_integer(array):
+    results=[]
+    for digits in array:
+        digits=reversed(digits)
+        current_digit=0
+        for i, value in enumerate(digits):
+            current_digit=current_digit+value*(10**i)
+        results.append(current_digit)
+
+
 
 def main2():
     cap = cv2.VideoCapture('Videos/12.mp4')
@@ -382,27 +395,34 @@ def main2():
 
 
 def main():
-    cap = cv2.VideoCapture('Videos/22.mp4')
-    digits = []
-    try:
-        while (cap.isOpened()):
-            ret, frame = cap.read()
-            cropped, cropped_gray = preprocess_image(frame)
+    video_list=os.listdir(VIDEOS_DIR_PATH)
+    digits_for_week=[]
 
-            digit_pos = find_digits(cropped_gray, cropped)
+    for video in video_list:
+        cap = cv2.VideoCapture(VIDEOS_DIR_PATH + video)
+        digits = []
+        try:
+            while (cap.isOpened()):
+                ret, frame = cap.read()
+                cropped, cropped_gray = preprocess_image(frame)
 
-            digits.append(recognize_digits_line_method(digit_pos, cropped, cropped_gray))
+                digit_pos = find_digits(cropped_gray, cropped)
 
-            if VISUALIZE:
-                cv2.imshow("1", cropped)
-                cv2.imshow("2", cropped_gray)
+                digits.append(recognize_digits_line_method(digit_pos, cropped, cropped_gray))
 
-                cv2.waitKey(1)
-    except Exception as e:
-        print(e)
-    filtered_digits = filter_digits(digits)
+                if VISUALIZE:
+                    cv2.imshow("1", cropped)
+                    cv2.imshow("2", cropped_gray)
 
-    print(get_most_frequent(filtered_digits))
+                    cv2.waitKey(1)
+        except Exception as e:
+            print(e)
+        filtered_digits = filter_digits(digits)
+        if len(filtered_digits)>0:
+            digits_for_week.append(get_most_frequent(filtered_digits))
+
+    print(digits_for_week)
+    print(array_to_integer(digits_for_week))
 
 
 if __name__ == '__main__':
