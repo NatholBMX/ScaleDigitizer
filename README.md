@@ -21,3 +21,6 @@ https://github.com/bikz05/digit-recognition
 https://github.com/g-sari/pyautodigits
 
 https://towardsdatascience.com/scanned-digits-recognition-using-k-nearest-neighbor-k-nn-d1a1528f0dea
+
+# Special thanks
+Thanks to [jwansek](https://github.com/jwansek) for contributing to the preprocessing.
