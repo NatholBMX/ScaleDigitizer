@@ -6,19 +6,22 @@ import cv2
 import numpy
 import urllib.request, urllib.error, urllib.parse
 import imutils
+import imutils.perspective
 from operator import itemgetter
 from skimage import img_as_ubyte
 from skimage.filters import threshold_local
 import os
 import pickle
+import sys
+import argparse
 
 from utils.deprecated_methods import crop_scale2, preprocess_image, find_digits
 from utils.imageAnalysis import DIGITS_LOOKUP
 
 USE_WEBCAM = False
-VISUALIZE = True
+VISUALIZE = False
 
-VIDEOS_DIR_PATH = "./videos/"
+VIDEOS_DIR_PATH = "./videos2/"
 DATABASE_PATH = "./database/data"
 
 if not USE_WEBCAM:
@@ -127,18 +130,17 @@ def preprocess_image(image):
     lines = image.copy()
     lines2 = image.copy()
 
-    if VISUALIZE:
-        # draw lines with biggesr space on lines with green lines
-        lines = cv2.line(lines, p1, p3, (0, 255, 0), 1)
-        lines = cv2.line(lines, p2, p4, (0, 255, 0), 1)
+    # draw lines with biggesr space on lines with green lines
+    lines = cv2.line(lines, p1, p3, (0, 255, 0), 1)
+    lines = cv2.line(lines, p2, p4, (0, 255, 0), 1)
 
-        # purely to see what's going on, also draw on a normal image
-        lines2 = cv2.line(lines2, p1, p3, (0, 255, 0), 2)
-        lines2 = cv2.line(lines2, p2, p4, (0, 255, 0), 2)
+    # purely to see what's going on, also draw on a normal image
+    lines2 = cv2.line(lines2, p1, p3, (0, 255, 0), 2)
+    lines2 = cv2.line(lines2, p2, p4, (0, 255, 0), 2)
 
-        # threshold lines image and find contours
-        lines = cv2.cvtColor(lines, cv2.COLOR_BGR2HSV)
-        lines = cv2.inRange(lines, (0, 255, 255), (255, 255, 255))
+    # threshold lines image and find contours
+    lines = cv2.cvtColor(lines, cv2.COLOR_BGR2HSV)
+    lines = cv2.inRange(lines, (0, 255, 255), (255, 255, 255))
 
     # draw black bars
     black_bar = 20
@@ -244,11 +246,9 @@ def recognize_digits_line_method(digits_positions, output_img, input_img):
         digit_height, digit_width = roi.shape
         suppose_W = max(1, int(digit_height / 1.9))
 
-        # 消除无关符号干扰
         if x1 - x0 < 50 and cv2.countNonZero(roi) / ((y1 - y0) * (x1 - x0)) < 0.2:
             continue
 
-        # 对1的情况单独识别
         if digit_width < suppose_W / 2:
             x0 = max(x0 + digit_width - suppose_W, 0)
             roi = input_img[y0:y1, x0:x1]
@@ -275,14 +275,10 @@ def recognize_digits_line_method(digits_positions, output_img, input_img):
 
         for (i, ((xa, ya), (xb, yb))) in enumerate(segments):
             seg_roi = roi[ya:yb, xa:xb]
-            # plt.imshow(seg_roi, 'gray')
-            # plt.show()
             total = cv2.countNonZero(seg_roi)
             area = (xb - xa) * (yb - ya) * 0.9
-            # print('prob: ', total / float(area))
             if total / float(area) > 0.25:
                 on[i] = 1
-        # print('encode: ', on)
         if tuple(on) in DIGITS_LOOKUP.keys():
             digit = DIGITS_LOOKUP[tuple(on)]
         else:
@@ -315,18 +311,17 @@ def recognize_digits_area_method(digits_positions, output_img, input_img):
         roi = input_img[y0:y1, x0:x1]
         h, w = roi.shape
         suppose_W = max(1, int(h / 1.9))
-        # 对1的情况单独识别
+
         if w < suppose_W / 2:
             x0 = x0 + w - suppose_W
             w = suppose_W
             roi = input_img[y0:y1, x0:x1]
         width = (max(int(w * 0.15), 1) + max(int(h * 0.15), 1)) // 2
         dhc = int(width * 0.8)
-        # print('width :', width)
-        # print('dhc :', dhc)
+
 
         small_delta = int(h / 6.0) // 4
-        # print('small_delta : ', small_delta)
+
         segments = [
 
             # # version 2
@@ -343,15 +338,12 @@ def recognize_digits_area_method(digits_positions, output_img, input_img):
 
         for (i, ((xa, ya), (xb, yb))) in enumerate(segments):
             seg_roi = roi[ya:yb, xa:xb]
-            # plt.imshow(seg_roi)
-            # plt.show()
+
             total = cv2.countNonZero(seg_roi)
             area = (xb - xa) * (yb - ya) * 0.9
             print(total / float(area))
             if total / float(area) > 0.45:
                 on[i] = 1
-
-        # print(on)
 
         if tuple(on) in DIGITS_LOOKUP.keys():
             digit = DIGITS_LOOKUP[tuple(on)]
@@ -406,28 +398,38 @@ def get_average_from_array(array):
     return average / 10
 
 
-def save_to_database(average):
-    if not os.path.isfile(DATABASE_PATH):
-        pickle.dump(average, open(DATABASE_PATH, "wb"))
+def save_to_database(average, database_path):
+    if not os.path.isfile(database_path):
+        pickle.dump(average, open(database_path, "wb"))
         return
 
-    last_value = read_all_from_database()[-1]
+    last_value = read_all_from_database(database_path)[-1]
     relative_change = average - last_value
 
-    pickle.dump(average, open(DATABASE_PATH, "ab"))
+    pickle.dump(average, open(database_path, "ab"))
 
     return relative_change
 
 
-def read_all_from_database():
+def read_all_from_database(database_path):
     results = []
-    with open(DATABASE_PATH, "rb") as file_stream:
+    with open(database_path, "rb") as file_stream:
         while True:
             try:
                 results.append(pickle.load(file_stream))
             except EOFError:
                 break
     return results
+
+
+def parse_arguments(args):
+    parser = argparse.ArgumentParser(description='Run the scale digitizer script')
+    parser.add_argument('-video_path', help="Path to folder with videos to process", default=VIDEOS_DIR_PATH)
+    parser.add_argument('-database_name', help="Name of database", default=DATABASE_PATH)
+
+    arguments = parser.parse_args(args)
+
+    return arguments
 
 
 def main2():
@@ -466,12 +468,14 @@ def main2():
     cv2.destroyAllWindows()
 
 
-def main():
-    video_list = os.listdir(VIDEOS_DIR_PATH)
+def main(args):
+    args=parse_arguments(args)
+
+    video_list = os.listdir(args.video_path)
     digits_for_week = []
 
     for video in video_list:
-        cap = cv2.VideoCapture(VIDEOS_DIR_PATH + video)
+        cap = cv2.VideoCapture(args.video_path + video)
         digits = []
         try:
             while (cap.isOpened()):
@@ -494,10 +498,10 @@ def main():
             digits_for_week.append(get_most_frequent(filtered_digits))
 
     average = get_average_from_array(digits_for_week)
-    relative_change = save_to_database(average)
+    relative_change = save_to_database(average, args.database_name)
     print(average)
     print(relative_change)
 
 
 if __name__ == '__main__':
-    main()
+    main(sys.argv[1:])
