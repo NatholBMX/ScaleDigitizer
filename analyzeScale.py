@@ -426,6 +426,7 @@ def parse_arguments(args):
     parser = argparse.ArgumentParser(description='Run the scale digitizer script')
     parser.add_argument('-video_path', help="Path to folder with videos to process", default=VIDEOS_DIR_PATH)
     parser.add_argument('-database_name', help="Name of database", default=DATABASE_PATH)
+    parser.add_argument("-visualize", help="Whether the ouput should be visualized or not", default=False)
 
     arguments = parser.parse_args(args)
 
@@ -470,6 +471,8 @@ def main2():
 
 def main(args):
     args=parse_arguments(args)
+    global VISUALIZE
+    VISUALIZE=args.visualize
 
     video_list = os.listdir(args.video_path)
     digits_for_week = []
