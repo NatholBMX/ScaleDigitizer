@@ -1,3 +1,7 @@
+"""
+For videos: the glare should be NOT on the digits but above/below it
+"""
+
 import cv2
 import numpy
 import urllib.request, urllib.error, urllib.parse
@@ -12,9 +16,9 @@ from utils.deprecated_methods import crop_scale2, preprocess_image, find_digits
 from utils.imageAnalysis import DIGITS_LOOKUP
 
 USE_WEBCAM = False
-VISUALIZE = False
+VISUALIZE = True
 
-VIDEOS_DIR_PATH = "./videos2/"
+VIDEOS_DIR_PATH = "./videos/"
 DATABASE_PATH = "./database/data"
 
 if not USE_WEBCAM:
@@ -454,6 +458,7 @@ def main():
 
     average = get_average_from_array(digits_for_week)
     relative_change = save_to_database(average)
+    print(average)
     print(relative_change)
 
 
