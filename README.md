@@ -14,23 +14,23 @@ For running the project as is, following packages are needed:
 
 # What does it do?
 We need videos of the bathroom scale, such as the following example:
-![Unprocessed image](https://github.com/NatholBMX/ScaleDigitizer/tree/master/images/01.png)
+![Unprocessed image](https://github.com/NatholBMX/ScaleDigitizer/blob/master/images/01.PNG)
 
 We then process each image individually. First off, the region of interest(ROI) of the scale
 will be calculated by applying a blur, edge detection and hough line transformation.
 The result is a cropped image which then is taken under a 4-point transformation and a
 threshold, resulting in following output:
-![Thresholded image](https://github.com/NatholBMX/ScaleDigitizer/tree/master/images/02.png)
+![Thresholded image](https://github.com/NatholBMX/ScaleDigitizer/tree/master/images/02.PNG)
 
 Next on, morphological dilation is applied to the threshold image to thicken the digits
 and seperate them via openCV contour methods. The result can be seen here:
-![Segmented digits](https://github.com/NatholBMX/ScaleDigitizer/tree/master/images/03.png)
+![Segmented digits](https://github.com/NatholBMX/ScaleDigitizer/tree/master/images/03.PNG)
 
 By dividing the segments into sub-segments for a seven segment display of each digit,
 one can simply count the number of pixel in relation the the total count of pixels of a sub-segment
 to find out whether the seven-segment-part is activated or not. This way, a recognition of digits
 is possible. Recognized digits can be displayed:
-![Recognized digit](https://github.com/NatholBMX/ScaleDigitizer/tree/master/images/04.png)
+![Recognized digit](https://github.com/NatholBMX/ScaleDigitizer/tree/master/images/04.PNG)
 
 Finally, a filtering of the recognized values is applied: the most occurrences of recognized digits
 are taken as the recognized value for every video. These votings are converted to a single floating point
