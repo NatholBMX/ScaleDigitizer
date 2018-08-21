@@ -1,8 +1,5 @@
 import cv2
-import imutils
 import numpy
-from imutils import contours
-from imutils.perspective import four_point_transform
 import math
 
 VISUALIZE = True

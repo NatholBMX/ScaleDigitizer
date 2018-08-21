@@ -30,6 +30,10 @@ if not USE_WEBCAM:
 
 
 def get_img_from_stream():
+    """
+    Gets the image from an input stream, either webcam or IP Cam app
+    :return: Image from stream
+    """
     if USE_WEBCAM:
         cam = cv2.VideoCapture(0)
         _, img = cam.read()
@@ -42,6 +46,11 @@ def get_img_from_stream():
 
 
 def get_biggest_difference(lines):
+    """
+    Get the biggest distance between lines
+    :param lines: list of lines
+    :return: Lines with the biggest difference in distance
+    """
     # there's probably an OpenCV function for this
     xs = [i[0] for i in lines]
     biggest = 0
@@ -55,17 +64,26 @@ def get_biggest_difference(lines):
     return biggestid - 1, biggestid
 
 
-def contours_to_points(contour):
+def contours_to_points(contour, padding=20):
+    """
+    Get vertex points from rectangular contour
+    :param contour: Rectanular input contour
+    :return: Vertex points with extra padding
+    """
     # this is NOT how you are supposed to do this
-    bbar = 20
     pts = str(contour).split("\n")
     pts = sorted(
         [[int(i) for i in pt.replace("[", "").replace("]", "").split(" ") if i != ""] for pt in pts if pt != ""],
         key=itemgetter(1))
-    return [[pts[0][0], pts[0][1] + bbar], [pts[-1][0], pts[-1][1] + bbar]]
+    return [[pts[0][0], pts[0][1] + padding], [pts[-1][0], pts[-1][1] + padding]]
 
 
 def preprocess_image(image):
+    """
+    Does all the pre-processing for the image
+    :param image:
+    :return:
+    """
     # blur and convert to grayscale
     gray = cv2.GaussianBlur(image, (11, 11), 0)
     gray = cv2.cvtColor(gray, cv2.COLOR_BGR2GRAY)
@@ -108,29 +126,33 @@ def preprocess_image(image):
     orig = image.copy()
     lines = image.copy()
     lines2 = image.copy()
-    # draw lines with biggesr space on lines with green lines
-    lines = cv2.line(lines, p1, p3, (0, 255, 0), 1)
-    lines = cv2.line(lines, p2, p4, (0, 255, 0), 1)
 
-    # purely to see what's going on, also draw on a normal image
-    lines2 = cv2.line(lines2, p1, p3, (0, 255, 0), 2)
-    lines2 = cv2.line(lines2, p2, p4, (0, 255, 0), 2)
+    if VISUALIZE:
+        # draw lines with biggesr space on lines with green lines
+        lines = cv2.line(lines, p1, p3, (0, 255, 0), 1)
+        lines = cv2.line(lines, p2, p4, (0, 255, 0), 1)
 
-    # threshold lines image and find contours
-    lines = cv2.cvtColor(lines, cv2.COLOR_BGR2HSV)
-    lines = cv2.inRange(lines, (0, 255, 255), (255, 255, 255))
-    cnts = cv2.findContours(lines.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)[1]
+        # purely to see what's going on, also draw on a normal image
+        lines2 = cv2.line(lines2, p1, p3, (0, 255, 0), 2)
+        lines2 = cv2.line(lines2, p2, p4, (0, 255, 0), 2)
+
+        # threshold lines image and find contours
+        lines = cv2.cvtColor(lines, cv2.COLOR_BGR2HSV)
+        lines = cv2.inRange(lines, (0, 255, 255), (255, 255, 255))
 
     # draw black bars
-    bbar = 20
-    image = cv2.copyMakeBorder(image, bbar, bbar, 0, 0, cv2.BORDER_CONSTANT)
-    orig = cv2.copyMakeBorder(orig, bbar, bbar, 0, 0, cv2.BORDER_CONSTANT)
+    black_bar = 20
+    image = cv2.copyMakeBorder(image, black_bar, black_bar, 0, 0, cv2.BORDER_CONSTANT)
+    orig = cv2.copyMakeBorder(orig, black_bar, black_bar, 0, 0, cv2.BORDER_CONSTANT)
+
+    contours = cv2.findContours(lines.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)[1]
+
 
     # only proceed if two contours are found
-    if len(cnts) == 2:
+    if len(contours) == 2:
         # convert contours into strings and append them to a list
         cntpts = []
-        for c in cnts:
+        for c in contours:
             pts = contours_to_points(c)
             cntpts.append(pts)
 
@@ -168,27 +190,33 @@ def preprocess_image(image):
 
 
 def find_digits(thresh_image, orig_image):
+    """
+    Find the digits inside threshold image
+    :param thresh_image: Threshold image for finding digits
+    :param orig_image: Original image to draw bounding boxes on
+    :return: Digit positions top left and bottom right points
+    """
+
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 5))
     thresh_image = cv2.morphologyEx(thresh_image, cv2.MORPH_DILATE, kernel, iterations=1)
-    # thresh_image = cv2.morphologyEx(thresh_image, cv2.MORPH_OPEN, kernel, iterations=2)
 
-    cnts = cv2.findContours(thresh_image.copy(), cv2.RETR_EXTERNAL,
+    contours = cv2.findContours(thresh_image.copy(), cv2.RETR_EXTERNAL,
                             cv2.CHAIN_APPROX_SIMPLE)
-    cnts = cnts[0] if imutils.is_cv2() else cnts[1]
-    digitCnts = []
+    contours = contours[0] if imutils.is_cv2() else contours[1]
+    digit_countours = []
     # cv2.imshow("threshed", thresh_image)
 
     # loop over the digit area candidates
     digits_positions = []
-    for c in cnts:
+    for contour in contours:
         # compute the bounding box of the contour
-        (x, y, w, h) = cv2.boundingRect(c)
+        (x, y, w, h) = cv2.boundingRect(contour)
 
         # if the contour is sufficiently large, it must be a digit
         if (w >= thresh_image.shape[1] * 0.02 and w <= thresh_image.shape[1] * 0.4) and (
                 h >= thresh_image.shape[0] * 0.2 and h <= thresh_image.shape[0] * 0.6):
             cv2.rectangle(orig_image, (x, y), (x + w, y + h), (0, 255, 0), 1)
-            digitCnts.append(c)
+            digit_countours.append(contour)
             x0 = x
             y0 = y
             x1 = x + w
@@ -200,37 +228,44 @@ def find_digits(thresh_image, orig_image):
 
 
 def recognize_digits_line_method(digits_positions, output_img, input_img):
+    """
+    Recognize the seven segment digitis with a line method
+    :param digits_positions: Positions of digits founds
+    :param output_img: Output image to visualize
+    :param input_img: Input image to detect images from (threshold image)
+    :return: Recognized digits in a list
+    """
+
     digits = []
-    # reverse digit list so we read from right to left
-    # digits_positions = list(reversed(digits_positions))
+
     for c in digits_positions:
         x0, y0 = c[0]
         x1, y1 = c[1]
         roi = input_img[y0:y1, x0:x1]
-        h, w = roi.shape
-        suppose_W = max(1, int(h / 1.9))
+        digit_height, digit_width = roi.shape
+        suppose_W = max(1, int(digit_height / 1.9))
 
         # 消除无关符号干扰
         if x1 - x0 < 50 and cv2.countNonZero(roi) / ((y1 - y0) * (x1 - x0)) < 0.2:
             continue
 
         # 对1的情况单独识别
-        if w < suppose_W / 2:
-            x0 = max(x0 + w - suppose_W, 0)
+        if digit_width < suppose_W / 2:
+            x0 = max(x0 + digit_width - suppose_W, 0)
             roi = input_img[y0:y1, x0:x1]
-            w = roi.shape[1]
+            digit_width = roi.shape[1]
 
-        center_y = h // 2
-        quater_y_1 = h // 4
+        center_y = digit_height // 2
+        quater_y_1 = digit_height // 4
         quater_y_3 = quater_y_1 * 3
-        center_x = w // 2
+        center_x = digit_width // 2
         line_width = 5  # line's width
-        width = (max(int(w * 0.15), 1) + max(int(h * 0.15), 1)) // 2
-        small_delta = int(h / 6.0) // 4
+        width = (max(int(digit_width * 0.15), 1) + max(int(digit_height * 0.15), 1)) // 2
+        small_delta = int(digit_height / 6.0) // 4
         segments = [
-            ((w - 2 * width, quater_y_1 - line_width), (w, quater_y_1 + line_width)),
-            ((w - 2 * width, quater_y_3 - line_width), (w, quater_y_3 + line_width)),
-            ((center_x - line_width - small_delta, h - 2 * width), (center_x - small_delta + line_width, h)),
+            ((digit_width - 2 * width, quater_y_1 - line_width), (digit_width, quater_y_1 + line_width)),
+            ((digit_width - 2 * width, quater_y_3 - line_width), (digit_width, quater_y_3 + line_width)),
+            ((center_x - line_width - small_delta, digit_height - 2 * width), (center_x - small_delta + line_width, digit_height)),
             ((0, quater_y_3 - line_width), (2 * width, quater_y_3 + line_width)),
             ((0, quater_y_1 - line_width), (2 * width, quater_y_1 + line_width)),
             ((center_x - line_width, 0), (center_x + line_width, 2 * width)),
@@ -255,13 +290,13 @@ def recognize_digits_line_method(digits_positions, output_img, input_img):
 
         digits.append(digit)
 
-        if cv2.countNonZero(roi[h - int(3 * width / 4):h, w - int(3 * width / 4):w]) / (9 / 16 * width * width) > 0.65:
+        if cv2.countNonZero(roi[digit_height - int(3 * width / 4):digit_height, digit_width - int(3 * width / 4):digit_width]) / (9 / 16 * width * width) > 0.65:
             digits.append('.')
             cv2.rectangle(output_img,
-                          (x0 + w - int(3 * width / 4), y0 + h - int(3 * width / 4)),
+                          (x0 + digit_width - int(3 * width / 4), y0 + digit_height - int(3 * width / 4)),
                           (x1, y1), (0, 128, 0), 2)
             cv2.putText(output_img, 'dot',
-                        (x0 + w - int(3 * width / 4), y0 + h - int(3 * width / 4) - 10),
+                        (x0 + digit_width - int(3 * width / 4), y0 + digit_height - int(3 * width / 4) - 10),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 128, 0), 2)
 
         cv2.rectangle(output_img, (x0, y0), (x1, y1), (0, 128, 0), 2)
