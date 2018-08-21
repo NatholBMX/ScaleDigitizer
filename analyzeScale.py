@@ -21,7 +21,7 @@ from utils.imageAnalysis import DIGITS_LOOKUP
 USE_WEBCAM = False
 VISUALIZE = False
 
-VIDEOS_DIR_PATH = "./videos2/"
+VIDEOS_DIR_PATH = "./videos/"
 DATABASE_PATH = "./database/data"
 
 if not USE_WEBCAM:
