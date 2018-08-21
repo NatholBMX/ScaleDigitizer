@@ -147,7 +147,6 @@ def preprocess_image(image):
 
     contours = cv2.findContours(lines.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)[1]
 
-
     # only proceed if two contours are found
     if len(contours) == 2:
         # convert contours into strings and append them to a list
@@ -201,7 +200,7 @@ def find_digits(thresh_image, orig_image):
     thresh_image = cv2.morphologyEx(thresh_image, cv2.MORPH_DILATE, kernel, iterations=1)
 
     contours = cv2.findContours(thresh_image.copy(), cv2.RETR_EXTERNAL,
-                            cv2.CHAIN_APPROX_SIMPLE)
+                                cv2.CHAIN_APPROX_SIMPLE)
     contours = contours[0] if imutils.is_cv2() else contours[1]
     digit_countours = []
     # cv2.imshow("threshed", thresh_image)
@@ -265,7 +264,8 @@ def recognize_digits_line_method(digits_positions, output_img, input_img):
         segments = [
             ((digit_width - 2 * width, quater_y_1 - line_width), (digit_width, quater_y_1 + line_width)),
             ((digit_width - 2 * width, quater_y_3 - line_width), (digit_width, quater_y_3 + line_width)),
-            ((center_x - line_width - small_delta, digit_height - 2 * width), (center_x - small_delta + line_width, digit_height)),
+            ((center_x - line_width - small_delta, digit_height - 2 * width),
+             (center_x - small_delta + line_width, digit_height)),
             ((0, quater_y_3 - line_width), (2 * width, quater_y_3 + line_width)),
             ((0, quater_y_1 - line_width), (2 * width, quater_y_1 + line_width)),
             ((center_x - line_width, 0), (center_x + line_width, 2 * width)),
@@ -290,7 +290,9 @@ def recognize_digits_line_method(digits_positions, output_img, input_img):
 
         digits.append(digit)
 
-        if cv2.countNonZero(roi[digit_height - int(3 * width / 4):digit_height, digit_width - int(3 * width / 4):digit_width]) / (9 / 16 * width * width) > 0.65:
+        if cv2.countNonZero(
+                roi[digit_height - int(3 * width / 4):digit_height, digit_width - int(3 * width / 4):digit_width]) / (
+                9 / 16 * width * width) > 0.65:
             digits.append('.')
             cv2.rectangle(output_img,
                           (x0 + digit_width - int(3 * width / 4), y0 + digit_height - int(3 * width / 4)),
@@ -410,7 +412,7 @@ def save_to_database(average):
         return
 
     last_value = read_all_from_database()[-1]
-    relative_change = last_value - average
+    relative_change = average - last_value
 
     pickle.dump(average, open(DATABASE_PATH, "ab"))
 
