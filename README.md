@@ -1,9 +1,52 @@
 # ScaleDigitizer
-Extract numbers from a scale for analysis of weight change.
+The goal of this project is to extract digits from the seven digit display
+of a bathroom scale to get the displayed weight. Having multiple videos available, one can average the weight
+and save this to a database to track relative weight changes from week to week.
 
-# Current status/lessons learned
-* First pre-processing step with circle detection works quite well-->leave parameters as they are
-* Extracting digit position for ROI detection seems to work quite well
+# Requirements
+For running the project as is, following packages are needed:
+
+* Python 3
+* Numpy
+* openCV
+* skimage
+* imutils
+
+# What does it do?
+We need videos of the bathroom scale, such as the following example:
+![Unprocessed image](https://github.com/NatholBMX/ScaleDigitizer/tree/master/images/01.png)
+
+We then process each image individually. First off, the region of interest(ROI) of the scale
+will be calculated by applying a blur, edge detection and hough line transformation.
+The result is a cropped image which then is taken under a 4-point transformation and a
+threshold, resulting in following output:
+![Thresholded image](https://github.com/NatholBMX/ScaleDigitizer/tree/master/images/02.png)
+
+Next on, morphological dilation is applied to the threshold image to thicken the digits
+and seperate them via openCV contour methods. The result can be seen here:
+![Segmented digits](https://github.com/NatholBMX/ScaleDigitizer/tree/master/images/03.png)
+
+By dividing the segments into sub-segments for a seven segment display of each digit,
+one can simply count the number of pixel in relation the the total count of pixels of a sub-segment
+to find out whether the seven-segment-part is activated or not. This way, a recognition of digits
+is possible. Recognized digits can be displayed:
+![Recognized digit](https://github.com/NatholBMX/ScaleDigitizer/tree/master/images/04.png)
+
+Finally, a filtering of the recognized values is applied: the most occurrences of recognized digits
+are taken as the recognized value for every video. These votings are converted to a single floating point
+number and then all recognized numbers are averaged over the number of available videos inside the designated
+folder.
+
+Every average is saved to a database and compared to the previous entry to calculate a relative
+difference in weight.
+
+# Using the script
+```python
+python analyizeScale -video_path=PATH_TO_VIDEOS -database_name=NAME_OF_DATABASE -visualize=BOOL
+```
+
+Arguments are optionals, since we will look for videos under ````./videos/```` and the database
+will be stored under ```./database/data``` by default. Results will not be visualized be default.
 
 # References 
 https://www.pyimagesearch.com/2017/02/13/recognizing-digits-with-opencv-and-python/
